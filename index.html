@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#07080c" />
+    <meta name="description" content="Link matching colours across a Rubik-style cube." />
+    <title>Cubpat — colour paths on a cube</title>
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Cube puzzle"></canvas>
+
+    <div id="hud-level" class="hud-level is-hidden">
+      <span class="hud-level-label">Level</span>
+      <span id="hud-level-num" class="hud-level-num">1</span>
+    </div>
+
+    <div id="hud" class="hud is-hidden">
+      <button id="btn-reset" class="icon-btn" type="button" aria-label="Reset level" title="Reset level">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            d="M4.5 9.5A7.5 7.5 0 1 1 4.9 15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+          <path d="M4.2 5.2v4.6h4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <button id="btn-menu" class="icon-btn" type="button" aria-label="Level select" title="Level select">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <g fill="currentColor">
+            <rect x="4" y="4" width="6.2" height="6.2" rx="1.6" />
+            <rect x="13.8" y="4" width="6.2" height="6.2" rx="1.6" />
+            <rect x="4" y="13.8" width="6.2" height="6.2" rx="1.6" />
+            <rect x="13.8" y="13.8" width="6.2" height="6.2" rx="1.6" />
+          </g>
+        </svg>
+      </button>
+    </div>
+
+    <section id="level-screen" class="screen levels">
+      <header class="screen-head">
+        <h1>Cubpat</h1>
+        <p id="level-progress">0 / 25</p>
+      </header>
+      <div id="level-grid" class="level-grid" role="grid" aria-label="Levels"></div>
+      <p class="legend">Link the colors. Fill every square.</p>
+    </section>
+
+    <div id="complete" class="solved-dock is-hidden" role="group" aria-label="Level solved">
+      <button id="btn-next" class="icon-btn solved-next" type="button" aria-label="Next level" title="Next level">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            d="M9 5.5 16 12l-7 6.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <button id="btn-complete-menu" class="icon-btn" type="button" aria-label="Level select" title="Level select">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <g fill="currentColor">
+            <rect x="4" y="4" width="6.2" height="6.2" rx="1.6" />
+            <rect x="13.8" y="4" width="6.2" height="6.2" rx="1.6" />
+            <rect x="4" y="13.8" width="6.2" height="6.2" rx="1.6" />
+            <rect x="13.8" y="13.8" width="6.2" height="6.2" rx="1.6" />
+          </g>
+        </svg>
+      </button>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

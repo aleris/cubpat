@@ -1,0 +1,20 @@
+{
+  "name": "cubpat",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal PlayCanvas colour-path puzzle on a Rubik-style cube",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node scripts/test-levels.mjs"
+  },
+  "dependencies": {
+    "playcanvas": "^2.23.3"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
+  }
+}
