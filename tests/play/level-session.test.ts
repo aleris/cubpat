@@ -62,14 +62,15 @@ class FakeCanvas {
   }
   releasePointerCapture(): void {}
 
-  emit(type: string): void {
+  emit(type: string, overrides: Record<string, unknown> = {}): void {
     this.listeners.get(type)?.({
       pointerType: "mouse",
       button: 0,
       pointerId: 1,
       clientX: 0,
       clientY: 0,
-      preventDefault(): void {}
+      preventDefault(): void {},
+      ...overrides
     });
   }
 
@@ -245,6 +246,27 @@ describe("LevelSession", () => {
     expect(session.paths.every((entry) => entry.length === 0)).toBe(true);
     expect(session.complete.every((linked) => !linked)).toBe(true);
     expect(session.solved).toBe(false);
+  });
+
+  it("ignores extra pointers while a finger is already drawing", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { session, canvas, press, move, release } = makeSession(level);
+
+    press(path[0]);
+    move(path[1]);
+
+    // A second finger lands on the path's start square and lifts again. It
+    // must neither truncate the path nor end the first finger's drag.
+    rendererState.pick = path[0];
+    canvas.emit("pointerdown", { pointerId: 2, pointerType: "touch" });
+    canvas.emit("pointerup", { pointerId: 2, pointerType: "touch" });
+
+    expect(session.paths[0]).toEqual(path.slice(0, 2));
+
+    move(path[2]);
+    expect(session.paths[0]).toEqual(path.slice(0, 3));
+    release();
   });
 
   it("removes its listeners and destroys the renderer when disposed", () => {

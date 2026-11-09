@@ -32,6 +32,12 @@ export async function createGameApp(canvas: HTMLCanvasElement): Promise<GameApp>
   options.devtools = false;
   app.init(options);
 
+  // PlayCanvas's AppBase leaves RESOLUTION_AUTO at a 1× backing store. Phones
+  // report 3–4× and the cube is the whole game, so render at the real density
+  // up to 2×: crisp on retina, while keeping the fill rate and texture memory
+  // affordable on mobile GPUs.
+  app.graphicsDevice.maxPixelRatio = Math.min(2, window.devicePixelRatio || 1);
+
   app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
   app.setCanvasResolution(pc.RESOLUTION_AUTO);
 

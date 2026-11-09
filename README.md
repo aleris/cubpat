@@ -52,7 +52,8 @@ pnpm test          # Vitest unit suite (no browser needed)
 - **Tap to fill.** A tap on a grey square that touches the open end of a path
   colours it with the colour touched last, so a path can be built by tapping one
   square after another. A tap on an empty square no path can reach shows an
-  instruction at the bottom of the screen.
+  instruction at the bottom of the screen. Only one pointer drives the board:
+  an extra finger or a resting palm is ignored until the first one lifts.
 - **Backtracking.** Dragging back onto a square the path already covers removes
   the colour from that point forward.
 - **Completion.** Reach the second square of the pair to link the colour (its
@@ -181,8 +182,8 @@ vitest.config.ts         node environment, 60 s test timeout
   elements, which used to round the tile gaps differently on every tile.
 - session rules, driven through the real pointer handlers with a stubbed
   renderer: drag to extend, release short of the target, press-to-truncate,
-  tap-to-grow, tap-to-link, hints for unreachable grey squares, reset, and
-  listener/renderer disposal;
+  tap-to-grow, tap-to-link, extra-pointer isolation, hints for unreachable grey
+  squares, reset, and listener/renderer disposal;
 - procedural mesh geometry: quad vertex/normal/UV layout, stitch tube radius and
   winding, index offsets when appending, and degenerate inputs;
 - save persistence: fresh saves, unsigned seed normalization, filtering

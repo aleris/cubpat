@@ -28,6 +28,12 @@ body {
   height: 100%;
 }
 
+html {
+  /* Keep iOS from inflating text when the phone turns to landscape. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   overflow: hidden;
@@ -40,6 +46,8 @@ body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  /* A long press on a tile or a button must not raise the iOS callout menu. */
+  -webkit-touch-callout: none;
 }
 
 #scene {
@@ -115,8 +123,12 @@ body {
     transform 0.12s ease;
 }
 
-.icon-btn:hover {
-  opacity: 1;
+/* Touch screens keep the last tapped element in :hover, so hover styling is
+   only meaningful where the pointer can actually hover. */
+@media (hover: hover) {
+  .icon-btn:hover {
+    opacity: 1;
+  }
 }
 
 .icon-btn:active {
@@ -140,7 +152,10 @@ body {
   align-items: center;
   justify-content: center;
   gap: clamp(22px, 4vh, 40px);
-  padding: 40px 20px calc(28px + env(safe-area-inset-bottom));
+  /* Clear the notch and the home indicator in landscape and fullscreen. */
+  padding:
+    40px max(20px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
 }
 
 .screen-head {
@@ -211,7 +226,7 @@ body {
   align-items: flex-start;
   justify-content: center;
   flex-wrap: wrap;
-  gap: clamp(18px, 4vw, 36px);
+  gap: clamp(10px, 3vw, 36px);
 }
 
 .zone-tab {
@@ -225,9 +240,9 @@ body {
   background: none;
   color: var(--muted-soft);
   font: inherit;
-  font-size: 12px;
+  font-size: clamp(10px, 3vw, 12px);
   font-weight: 600;
-  letter-spacing: 0.22em;
+  letter-spacing: clamp(0.1em, 0.5vw, 0.22em);
   text-transform: uppercase;
   cursor: pointer;
   transition: color 0.18s ease;
@@ -236,7 +251,7 @@ body {
 .zone-tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: clamp(4px, 1vw, 7px);
   padding-bottom: 7px;
   white-space: nowrap;
 }
@@ -244,8 +259,8 @@ body {
 .zone-tab-icon {
   display: inline-flex;
   flex: none;
-  width: 13px;
-  height: 13px;
+  width: clamp(10px, 2.6vw, 13px);
+  height: clamp(10px, 2.6vw, 13px);
 }
 
 .zone-tab-icon svg {
@@ -264,9 +279,14 @@ body {
   transition: color 0.18s ease;
 }
 
-.zone-tab:hover:not(:disabled),
 .zone-tab[aria-selected="true"] {
   color: var(--text);
+}
+
+@media (hover: hover) {
+  .zone-tab:hover:not(:disabled) {
+    color: var(--text);
+  }
 }
 
 .zone-tab[aria-selected="true"] .zone-tab-sub {
@@ -351,17 +371,22 @@ body {
   pointer-events: none;
 }
 
-/* Keep the title and area tabs at the top; the legend rides the bottom. */
+/* Keep the title and area tabs at the top; the legend rides the bottom.
+   Short screens scroll here; pan-y lets a finger scroll it while taps still
+   play levels, and contain keeps the browser's own pull-to-refresh out. */
 .screen.levels {
   justify-content: flex-start;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .level-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: clamp(8px, 2vw, 18px);
-  width: min(94vw, clamp(240px, calc(100dvh - 280px), 600px));
+  /* Fit the screen's content box, the free height, and the desktop cap. */
+  width: min(100%, clamp(240px, calc(100dvh - 280px), 600px));
 }
 
 .cell {
@@ -371,7 +396,8 @@ body {
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 18px;
+  /* A fixed 18px radius turns tiny landscape cells into circles. */
+  border-radius: min(18px, 20%);
   background: transparent;
   cursor: pointer;
   transition: border-color 0.22s ease;
@@ -386,6 +412,7 @@ body {
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
 
@@ -399,10 +426,10 @@ body {
 }
 
 .mini {
-  --s: clamp(38px, 12vw, 80px);
+  /* One cube per cell: never wider than the cell, still capped on desktop. */
   display: block;
-  width: var(--s);
-  height: var(--s);
+  width: min(100%, 80px);
+  height: auto;
   transition: transform 0.25s ease, filter 0.25s ease;
 }
 
@@ -411,9 +438,11 @@ body {
   opacity: 0.62;
 }
 
-.cell:not(.locked):hover .mini {
-  transform: scale(1.06);
-  filter: brightness(1.12);
+@media (hover: hover) {
+  .cell:not(.locked):hover .mini {
+    transform: scale(1.06);
+    filter: brightness(1.12);
+  }
 }
 
 .legend {
@@ -533,9 +562,30 @@ body {
   }
 }
 
-@media (max-width: 420px) {
+/* Phones on their side, and other short windows: shrink the chrome so a 5×5
+   grid of usable cells still fits, and let the grid scroll only as a fallback. */
+@media (max-height: 560px) {
+  .screen {
+    gap: 10px;
+    padding:
+      14px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
+  .screen-head h1 {
+    font-size: clamp(24px, 5vh, 34px);
+  }
+
+  .zone-tab-sub {
+    font-size: 9px;
+  }
+
   .level-grid {
-    gap: 8px;
-    width: 96vw;
+    gap: clamp(4px, 1.2vw, 10px);
+    width: min(100%, 600px, calc(100dvh - 132px));
+  }
+
+  .legend {
+    font-size: 10px;
   }
 }

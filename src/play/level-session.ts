@@ -38,6 +38,8 @@ export class LevelSession {
   private readonly app: pc.AppBase;
   private readonly callbacks: SessionCallbacks;
   private drag: DragState | null = null;
+  /** Pointer currently driving the board; extra touches are ignored. */
+  private activePointer: number | null = null;
   private disposed = false;
   /** Colour touched last: the one a tap on a grey square extends. */
   private activeColor = -1;
@@ -46,6 +48,7 @@ export class LevelSession {
   private readonly onPointerMove = (e: PointerEvent): void => this.pointerMove(e);
   private readonly onPointerUp = (e: PointerEvent): void => this.pointerUp(e);
   private readonly onPointerCancel = (e: PointerEvent): void => {
+    if (e.pointerId !== this.activePointer) return;
     this.pointerUp(e);
     this.renderer.clearCursor();
   };
@@ -75,6 +78,7 @@ export class LevelSession {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.activePointer = null;
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
@@ -89,6 +93,7 @@ export class LevelSession {
     for (const path of this.paths) path.length = 0;
     this.complete.fill(false);
     this.drag = null;
+    this.activePointer = null;
     this.activeColor = -1;
     this.solved = false;
     this.renderer.stopGlow();
@@ -121,7 +126,11 @@ export class LevelSession {
 
   private pointerDown(e: PointerEvent): void {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    // A second finger, or a palm resting on the glass, must not reopen,
+    // truncate or extend the path the first finger is drawing.
+    if (this.activePointer !== null) return;
     e.preventDefault();
+    this.activePointer = e.pointerId;
     this.canvas.setPointerCapture(e.pointerId);
     this.renderer.setCursor(e.clientX, e.clientY);
 
@@ -138,6 +147,7 @@ export class LevelSession {
   }
 
   private pointerMove(e: PointerEvent): void {
+    if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
     // The lean follows every move, not just the square changes: that is what
     // slides the next square under the pointer.
     this.renderer.setCursor(e.clientX, e.clientY);
@@ -158,6 +168,8 @@ export class LevelSession {
   }
 
   private pointerUp(e: PointerEvent): void {
+    if (e.pointerId !== this.activePointer) return;
+    this.activePointer = null;
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     const drag = this.drag;
     this.drag = null;
