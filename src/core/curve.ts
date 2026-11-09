@@ -50,7 +50,7 @@ const CURVE_SPANS: readonly CurveSpan[] = [
   { levels: 5, size: 4, colors: 5 },
   // Zone 2
   { levels: 5, size: 4, colors: 6 },
-  { levels: 5, size: 5, colors: 5 },
+  { levels: 5, size: 5, colors: 6 },
   { levels: 5, size: 5, colors: 6 },
   { levels: 5, size: 5, colors: 7 },
   { levels: 5, size: 5, colors: 7 },

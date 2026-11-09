@@ -21,7 +21,7 @@ describe("level curve", () => {
     });
   });
 
-  it("starts with a 2x2 tutorial and ends on 6x6 with nine colours", () => {
+  it("starts with a 2x2 tutorial and ends on 6x6 with ten colours", () => {
     expect(LEVEL_CONFIGS[0]).toEqual({
       index: 0,
       size: 2,
@@ -31,7 +31,7 @@ describe("level curve", () => {
     expect(LEVEL_CONFIGS[LEVEL_COUNT - 1]).toEqual({
       index: LEVEL_COUNT - 1,
       size: 6,
-      colors: 9,
+      colors: 10,
       variant: "edge"
     });
   });
@@ -62,7 +62,7 @@ describe("level curve", () => {
       expect(config.size).toBeGreaterThanOrEqual(2);
       expect(config.size).toBeLessThanOrEqual(6);
       expect(config.colors).toBeGreaterThanOrEqual(2);
-      expect(config.colors).toBeLessThanOrEqual(9);
+      expect(config.colors).toBeLessThanOrEqual(10);
       expect(config.colors * 4).toBeLessThanOrEqual(3 * config.size ** 2);
     }
   });
