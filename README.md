@@ -66,10 +66,14 @@ pnpm test          # Vitest unit suite (no browser needed)
   ringed by a slowly spinning rainbow border (cube stays fully visible and unblurred).
 
 Progress and the master seed live in `localStorage` (`cubpat.save.v1`). The
-level grid is 5×5; the next level unlocks only when the previous one is done.
-The open level is in the URL (`#/level/3`), so a refresh restarts the same level
-and the browser's back/forward buttons move between a level and the level screen.
-Locked, out-of-range or unknown URLs fall back to the level screen.
+level screen groups the 75 levels into three 25-level area tabs (Foundations,
+Expansion, Mastery); each tab shows a 5×5 grid and the next level unlocks only
+when the previous one is done. Areas not yet reached stay disabled, except when
+`DEBUG_DEV_MODE_ON` unlocks every level.
+The open level is in the URL (`#/level/3`), and the active area tab is in the
+URL (`#/area/2`), so a refresh keeps both. The browser's back/forward buttons
+move between levels and area tabs. Locked, out-of-range or unknown URLs fall
+back to the level screen.
 
 ## Level generation
 
@@ -94,9 +98,12 @@ same run.
 4. Only the two endpoints of each run are coloured in the start state; the rest
    is grey.
 
-`src/core/curve.ts` holds the grading curve — cube size and colour count both
-grow while the average path length shrinks (2×2 with 2 colours at level 1 up to
-6×6 with 15 colours at level 25).
+`src/core/curve.ts` holds three 25-level zones. Zone 1 ramps from 2×2 with
+2 colours to 4×4 with 4; zone 2 opens with a 4×4 row and then moves to 5×5;
+zone 3 opens with a 5×5 row and then moves to 6×6. Colours stop at 9, where the
+palette and the tile motifs stay distinct. Each level also carries a variant —
+`balanced`, `spread`, `mixed`, `clustered`, or `edge` — which reshapes endpoint
+placement or run lengths without changing the cube size or colour count.
 
 ## Layout
 
@@ -120,7 +127,8 @@ src/render/              PlayCanvas presentation
 src/play/
   level-session.ts       drag rules: extend, truncate, release, completion
 src/ui/
-  screens.ts             level grid (5×5 mini cubes), HUD, solved dock, toast
+  screens.ts             area tabs, level grid (5×5 mini cubes), HUD,
+                         solved dock, toast
   mini-cube.ts           level-screen mini cube canvas
 src/state/
   progress.ts            localStorage save (seed + completed levels)
@@ -151,14 +159,15 @@ vitest.config.ts         node environment, 60 s test timeout
   (the pointer can now lean the cube from anywhere on its surface), and always
   turns the aimed point towards the camera;
 - the grading curve;
-- 125 generated levels (25 levels × 5 seeds): full coverage, adjacency along
-  every path, endpoint pairs distinct and exposed alone in the start state, and
-  deterministic regeneration from `(seed, index)`;
+- 375 generated levels (75 levels × 5 seeds): full coverage, adjacency along
+  every path, endpoint pairs distinct and exposed alone in the start state,
+  per-level variant constraints, and deterministic regeneration from
+  `(seed, index)`;
 - **solvability**, with the independent solver in `src/core/solver.ts` that only
   sees the layout and the endpoint pairs: exact *covering* search (disjoint
-  paths that leave no square grey) on boards up to 4×4, where the exponential
-  search terminates, plus a BFS "each pair is connectable" necessary condition
-  on every board. The generator's own solution is additionally validated
+  paths that leave no square grey) on every 3×3 board and the 4×4 five-colour
+  boards, where the exponential search terminates, plus a BFS "each pair is
+  connectable" necessary condition on every board. The generator's own solution is additionally validated
   against the *play* rules (endpoints, adjacency, no shared square, no entry
   into another colour's endpoint, full coverage).
 - the tutorial level stays nearly forced: at most a handful of covering

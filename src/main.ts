@@ -1,5 +1,5 @@
 import "./styles.css";
-import { LEVEL_COUNT } from "./core/curve.ts";
+import { LEVEL_COUNT, ZONES } from "./core/curve.ts";
 import { LevelSession } from "./play/level-session.ts";
 import { createGameApp } from "./render/scene.ts";
 import { isUnlocked, loadSave, recordCompletion } from "./state/progress.ts";
@@ -14,8 +14,9 @@ decorateTitle();
 
 const screens = new Screens(save.seed, {
   onPlay: (index) => navigate(index),
+  onZone: (zoneIndex) => navigateArea(zoneIndex),
   onReset: () => session?.reset(),
-  onMenu: () => navigate(null)
+  onMenu: () => navigateArea(screens.area)
 });
 
 let session: LevelSession | null = null;
@@ -24,7 +25,8 @@ let hintedThisLevel = false;
 const ready = createGameApp(canvas);
 
 // ---------------------------------------------------------------------------
-// Routing: `#/level/N` (1-based) is a level, anything else is the level menu.
+// Routing: `#/level/N` (1-based) is a level, `#/area/N` (1-based) is the
+// level menu on that area tab, anything else is the level menu.
 // Hash URLs keep working under the relative build base, from any folder.
 
 const MENU_URL = location.pathname + location.search;
@@ -37,18 +39,36 @@ function routedLevel(): number | null {
   return index >= 0 && index < LEVEL_COUNT && isUnlocked(save, index) ? index : null;
 }
 
+/** Area index named by the URL, or null when it names none or a locked one. */
+function routedArea(): number | null {
+  const match = /^#\/area\/(\d+)$/.exec(location.hash);
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return index >= 0 && index < ZONES.length && isUnlocked(save, ZONES[index].from) ? index : null;
+}
+
 function route(): void {
   const index = routedLevel();
   if (index !== null) {
     void startLevel(index);
     return;
   }
+  const area = routedArea();
+  if (area !== null) {
+    showLevels(area);
+    return;
+  }
   if (location.hash) history.replaceState(null, "", MENU_URL);
   showLevels();
 }
 
-function navigate(index: number | null): void {
-  history.pushState(null, "", index === null ? MENU_URL : `#/level/${index + 1}`);
+function navigate(index: number): void {
+  history.pushState(null, "", `#/level/${index + 1}`);
+  route();
+}
+
+function navigateArea(area: number): void {
+  history.pushState(null, "", `#/area/${area + 1}`);
   route();
 }
 
@@ -66,11 +86,11 @@ function dismissBoot(): void {
 
 // ---------------------------------------------------------------------------
 
-function showLevels(): void {
+function showLevels(area?: number): void {
   session?.dispose();
   session = null;
   canvas!.classList.add("is-hidden");
-  screens.showLevels(save);
+  screens.showLevels(save, area);
   dismissBoot();
 }
 
@@ -114,7 +134,7 @@ function handleSolved(index: number): void {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && session) navigate(null);
+  if (event.key === "Escape" && session) navigateArea(screens.area);
 });
 
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());

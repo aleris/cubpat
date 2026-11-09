@@ -236,9 +236,9 @@ Save data lives in `localStorage["cubpat.save.v1"]`:
 ```js
 localStorage.setItem(
   "cubpat.save.v1",
-  JSON.stringify({ seed: 2024, completed: Array.from({ length: 25 }, (_, i) => i) })
+  JSON.stringify({ seed: 2024, completed: Array.from({ length: 75 }, (_, i) => i) })
 );
-location.hash = "#/level/25";
+location.hash = "#/level/75";
 ```
 
 Levels are 1-based in the hash. `DEBUG_DEV_MODE_ON` in

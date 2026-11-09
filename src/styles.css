@@ -1,6 +1,8 @@
 :root {
   --text: #eef1f8;
   --muted: #8a93a8;
+  --muted-soft: #aeb8cc;
+  --muted-strong: #c8cfdd;
   --line: rgba(255, 255, 255, 0.1);
   --panel: rgba(255, 255, 255, 0.055);
   --panel-strong: rgba(255, 255, 255, 0.1);
@@ -197,20 +199,83 @@ body {
 }
 
 
-.screen-head p {
-  margin: 0;
+.zone-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.zone-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: clamp(18px, 4vw, 36px);
+}
+
+.zone-tab {
+  position: relative;
+  appearance: none;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--muted-soft);
+  font: inherit;
   font-size: 12px;
-  letter-spacing: 0.24em;
+  font-weight: 600;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.zone-tab:hover:not(:disabled),
+.zone-tab[aria-selected="true"] {
+  color: var(--text);
+}
+
+.zone-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.zone-tab:disabled {
+  color: #687186;
+  cursor: not-allowed;
+}
+
+.zone-tab:focus-visible {
+  outline: 2px solid #6ee7ff;
+  outline-offset: 4px;
+}
+
+.zone-progress {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   font-variant-numeric: tabular-nums;
+}
+
+/* Keep the title and area tabs at the top; the legend rides the bottom. */
+.screen.levels {
+  justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .level-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: clamp(8px, 2vw, 18px);
-  width: min(600px, 94vw);
+  width: min(94vw, clamp(240px, calc(100dvh - 280px), 600px));
 }
 
 .cell {
@@ -224,6 +289,18 @@ body {
   background: transparent;
   cursor: pointer;
   transition: border-color 0.22s ease;
+}
+
+.num {
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  color: var(--muted-soft);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 /* The current level is the only cell with a frame; hover never adds one. */
@@ -254,11 +331,11 @@ body {
 }
 
 .legend {
-  margin: 0;
+  margin: auto 0 0;
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-strong);
   text-align: center;
 }
 

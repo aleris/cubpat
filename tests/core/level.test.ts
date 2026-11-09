@@ -43,6 +43,38 @@ function assertLevelShape(level: Level): void {
   expect(validateLevel(level)).toEqual({ ok: true, errors: [] });
 }
 
+function assertVariant(level: Level): void {
+  const { variant, colors, layout, endpoints, solution } = level;
+  if (variant === "balanced") return;
+
+  if (variant === "mixed") {
+    const lengths = solution.map((path) => path.length);
+    const average = lengths.reduce((sum, length) => sum + length, 0) / colors;
+    expect(Math.min(...lengths)).toBeLessThanOrEqual(average * 0.75);
+    expect(Math.max(...lengths)).toBeGreaterThanOrEqual(average * 1.25);
+    return;
+  }
+
+  const faceCounts = [0, 0, 0];
+  let crossFace = 0;
+  for (const [a, b] of endpoints) {
+    faceCounts[layout.slot[a]]++;
+    faceCounts[layout.slot[b]]++;
+    if (layout.slot[a] !== layout.slot[b]) crossFace++;
+  }
+
+  if (variant === "spread") {
+    const ideal = (colors * 2) / 3;
+    expect(Math.max(...faceCounts)).toBeLessThanOrEqual(Math.ceil(ideal) + 1);
+    expect(Math.min(...faceCounts)).toBeGreaterThanOrEqual(Math.floor(ideal) - 1);
+  } else if (variant === "clustered") {
+    expect(Math.max(...faceCounts)).toBeGreaterThanOrEqual(Math.ceil(colors * 0.75));
+  } else {
+    expect(variant).toBe("edge");
+    expect(crossFace).toBeGreaterThanOrEqual(Math.ceil(colors / 2));
+  }
+}
+
 describe("generateLevel", () => {
   it("builds every level for every seed from the endpoint pairs", () => {
     for (const seed of SEEDS) {
@@ -51,7 +83,9 @@ describe("generateLevel", () => {
         expect(level.index).toBe(config.index);
         expect(level.size).toBe(config.size);
         expect(level.colors).toBe(config.colors);
+        expect(level.variant).toBe(config.variant);
         assertLevelShape(level);
+        assertVariant(level);
       }
     }
   }, 60_000);
@@ -78,7 +112,9 @@ describe("generateLevel", () => {
   }, 30_000);
 
   it("throws for a configuration the path split cannot satisfy", () => {
-    expect(() => generateLevel({ index: 0, size: 2, colors: 10 }, 0)).toThrow(/generation failed/);
+    expect(() =>
+      generateLevel({ index: 0, size: 2, colors: 10, variant: "balanced" }, 0)
+    ).toThrow(/generation failed/);
   }, 30_000);
 });
 

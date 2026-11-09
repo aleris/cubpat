@@ -8,12 +8,12 @@
  * then only exposes the two endpoint squares of each path; the generator's own
  * paths are a guaranteed solution, so every level is solvable by construction.
  *
- * Difficulty is graded by `curve.ts`: cube size and colour count both grow,
- * while the average path length shrinks (longer, easier snakes early on; short,
- * tangled ones later).
+ * Difficulty is graded by `curve.ts`: cube size and colour count grow, then
+ * `variant` reshapes the same board: balanced paths, spread or clustered
+ * endpoints, mixed long/short runs, or pairs that cross a cube edge.
  */
 
-import type { LevelConfig } from "./curve.ts";
+import type { LevelConfig, LevelVariant } from "./curve.ts";
 import { areAdjacent, buildLayout, type CubeLayout } from "./layout.ts";
 import { colorFor } from "./palette.ts";
 import { mulberry32, seedForLevel, shuffleInPlace } from "./rng.ts";
@@ -132,7 +132,12 @@ function hamiltonianPath(layout: CubeLayout, rng: () => number): number[] | null
 }
 
 /** Cut a path into `colors` contiguous runs, each at least MIN_PATH long. */
-function cutPath(path: number[], colors: number, rng: () => number): number[][] | null {
+function cutPath(
+  path: number[],
+  colors: number,
+  rng: () => number,
+  variant: LevelVariant
+): number[][] | null {
   const total = path.length;
   if (total < colors * MIN_PATH) return null;
 
@@ -146,8 +151,11 @@ function cutPath(path: number[], colors: number, rng: () => number): number[][] 
     }
     const maxHere = remaining - left * MIN_PATH;
     const ideal = remaining / (colors - i);
-    const jitter = 1 + (rng() * 2 - 1) * 0.28;
-    const length = Math.min(maxHere, Math.max(MIN_PATH, Math.round(ideal * jitter)));
+    const target =
+      variant === "mixed"
+        ? ideal * (1 + (i % 2 === 0 ? 1 : -1) * (0.28 + rng() * 0.24))
+        : ideal * (1 + (rng() * 2 - 1) * 0.28);
+    const length = Math.min(maxHere, Math.max(MIN_PATH, Math.round(target)));
     lengths.push(length);
     remaining -= length;
   }
@@ -165,6 +173,7 @@ export interface Level {
   index: number;
   size: number;
   colors: number;
+  variant: LevelVariant;
   layout: CubeLayout;
   /** per colour: the generator's own solution path */
   solution: number[][];
@@ -176,14 +185,115 @@ export interface Level {
   initial: Int8Array;
 }
 
+interface VariantScore {
+  ok: boolean;
+  score: number;
+}
+
+/**
+ * How strongly a candidate matches its requested variation. `score` only
+ * ranks fallbacks; a candidate that meets `ok` is returned immediately.
+ */
+function scoreVariant(
+  layout: CubeLayout,
+  segments: number[][],
+  colors: number,
+  variant: LevelVariant
+): VariantScore {
+  if (variant === "balanced") return { ok: true, score: 0 };
+
+  if (variant === "mixed") {
+    const lengths = segments.map((segment) => segment.length);
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    const average = total / colors;
+    const shortest = Math.min(...lengths);
+    const longest = Math.max(...lengths);
+    return {
+      ok: shortest <= average * 0.75 && longest >= average * 1.25,
+      score: (longest - shortest) / average
+    };
+  }
+
+  const faceCounts = [0, 0, 0];
+  let crossFace = 0;
+  for (const segment of segments) {
+    const first = segment[0];
+    const last = segment[segment.length - 1];
+    const firstSlot = layout.slot[first];
+    const lastSlot = layout.slot[last];
+    faceCounts[firstSlot]++;
+    faceCounts[lastSlot]++;
+    if (firstSlot !== lastSlot) crossFace++;
+  }
+
+  if (variant === "edge") {
+    return { ok: crossFace >= Math.ceil(colors / 2), score: crossFace };
+  }
+
+  if (variant === "clustered") {
+    const largest = Math.max(...faceCounts);
+    return { ok: largest >= Math.ceil(colors * 0.75), score: largest };
+  }
+
+  // spread: endpoints should split across the three play faces.
+  const ideal = (colors * 2) / 3;
+  const largest = Math.max(...faceCounts);
+  const smallest = Math.min(...faceCounts);
+  return {
+    ok: largest <= Math.ceil(ideal) + 1 && smallest >= Math.floor(ideal) - 1,
+    score: -faceCounts.reduce((sum, count) => sum + Math.abs(count - ideal), 0)
+  };
+}
+
+function makeLevel(
+  config: LevelConfig,
+  layout: CubeLayout,
+  segments: number[][],
+  rng: () => number
+): Level {
+  const colorOrder = shuffleInPlace(
+    rng,
+    Array.from({ length: config.colors }, (_, i) => i)
+  );
+
+  const solution: number[][] = new Array(config.colors);
+  const endpoints: Array<[number, number]> = new Array(config.colors);
+  const palette: string[] = new Array(config.colors);
+  const initial = new Int8Array(layout.count).fill(-1);
+
+  for (let slot = 0; slot < config.colors; slot++) {
+    const color = colorOrder[slot];
+    const segment = segments[slot];
+    solution[color] = segment;
+    endpoints[color] = [segment[0], segment[segment.length - 1]];
+    palette[color] = colorFor(color);
+    initial[segment[0]] = color;
+    initial[segment[segment.length - 1]] = color;
+  }
+
+  return {
+    index: config.index,
+    size: config.size,
+    colors: config.colors,
+    variant: config.variant,
+    layout,
+    solution,
+    endpoints,
+    palette,
+    initial
+  };
+}
+
 export function generateLevel(config: LevelConfig, masterSeed: number): Level {
   const layout = buildLayout(config.size);
+  let best: { score: number; level: Level } | null = null;
+
   for (let attempt = 0; attempt < 24; attempt++) {
     const rng = mulberry32(seedForLevel(masterSeed, config.index, attempt));
     const hamilton = hamiltonianPath(layout, rng);
     if (!hamilton) continue;
 
-    const segments = cutPath(hamilton, config.colors, rng);
+    const segments = cutPath(hamilton, config.colors, rng, config.variant);
     if (!segments) continue;
 
     // Reject degenerate colours: a pair whose endpoints are direct neighbours
@@ -197,37 +307,15 @@ export function generateLevel(config: LevelConfig, masterSeed: number): Level {
     }
     if (degenerate) continue;
 
-    const colorOrder = shuffleInPlace(
-      rng,
-      Array.from({ length: config.colors }, (_, i) => i)
-    );
+    const variantScore = scoreVariant(layout, segments, config.colors, config.variant);
+    if (variantScore.ok) return makeLevel(config, layout, segments, rng);
 
-    const solution: number[][] = new Array(config.colors);
-    const endpoints: Array<[number, number]> = new Array(config.colors);
-    const palette: string[] = new Array(config.colors);
-    const initial = new Int8Array(layout.count).fill(-1);
-
-    for (let slot = 0; slot < config.colors; slot++) {
-      const color = colorOrder[slot];
-      const segment = segments[slot];
-      solution[color] = segment;
-      endpoints[color] = [segment[0], segment[segment.length - 1]];
-      palette[color] = colorFor(color);
-      initial[segment[0]] = color;
-      initial[segment[segment.length - 1]] = color;
+    if (!best || variantScore.score > best.score) {
+      best = { score: variantScore.score, level: makeLevel(config, layout, segments, rng) };
     }
-
-    return {
-      index: config.index,
-      size: config.size,
-      colors: config.colors,
-      layout,
-      solution,
-      endpoints,
-      palette,
-      initial
-    };
   }
+
+  if (best) return best.level;
   throw new Error(`level ${config.index} generation failed`);
 }
 

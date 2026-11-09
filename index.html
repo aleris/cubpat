@@ -119,9 +119,17 @@
     <section id="level-screen" class="screen levels">
       <header class="screen-head">
         <h1>Cubpat</h1>
-        <p id="level-progress">0 / 25</p>
       </header>
-      <div id="level-grid" class="level-grid" role="group" aria-label="Levels"></div>
+      <div class="zone-head">
+        <div id="zone-tabs" class="zone-tabs" role="tablist" aria-label="Areas"></div>
+        <p id="level-progress" class="zone-progress" aria-live="polite">0 / 25</p>
+      </div>
+      <div
+        id="level-grid"
+        class="level-grid"
+        role="tabpanel"
+        aria-label="Levels"
+      ></div>
       <p class="legend">Link the colors. Fill every square.</p>
     </section>
 

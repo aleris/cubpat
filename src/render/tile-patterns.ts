@@ -5,7 +5,7 @@
  *  a second, colour-blind-safe channel.
  *
  *  The motif is keyed directly by colour index, and there is one motif per
- *  palette entry (20). A level uses at most 15 colours, so two colours in the
+ *  palette entry (20). A level uses at most 9 colours, so two colours in the
  *  same level never share a pattern, and a colour keeps the same pattern across
  *  levels.
  */
