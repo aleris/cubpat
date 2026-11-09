@@ -38,28 +38,28 @@ interface CurveSpan {
 }
 
 /**
- * Three 25-level zones. Zone 2 opens with a 4×4 row and then moves to 5×5;
- * zone 3 opens with a 5×5 row and then moves to 6×6. Colours rise slowly and
- * stop at 9, where the palette and the tile motifs still stay distinct.
+ * Three 25-level zones. Colours rise slowly and stop at 10, where the palette and the tile motifs still stay distinct.
  */
 const CURVE_SPANS: readonly CurveSpan[] = [
-  // Zone 1: 2×2 / 3×3 / 4×4, max 4 colours.
+  // Zone 1
   { levels: 2, size: 2, colors: 2 },
-  { levels: 3, size: 3, colors: 2 },
-  { levels: 7, size: 3, colors: 3 },
-  { levels: 6, size: 4, colors: 3 },
-  { levels: 7, size: 4, colors: 4 },
-  // Zone 2: 4×4 first row, then 5×5, colours 4 → 7.
-  { levels: 3, size: 4, colors: 4 },
-  { levels: 2, size: 4, colors: 5 },
-  { levels: 4, size: 5, colors: 5 },
-  { levels: 7, size: 5, colors: 6 },
-  { levels: 9, size: 5, colors: 7 },
-  // Zone 3: 5×5 first row, then 6×6, colours 7 → 9.
-  { levels: 2, size: 5, colors: 7 },
-  { levels: 3, size: 5, colors: 8 },
-  { levels: 8, size: 6, colors: 8 },
-  { levels: 12, size: 6, colors: 9 }
+  { levels: 3, size: 3, colors: 3 },
+  { levels: 5, size: 3, colors: 4 },
+  { levels: 5, size: 4, colors: 4 },
+  { levels: 5, size: 4, colors: 5 },
+  { levels: 5, size: 4, colors: 5 },
+  // Zone 2
+  { levels: 5, size: 4, colors: 6 },
+  { levels: 5, size: 5, colors: 5 },
+  { levels: 5, size: 5, colors: 6 },
+  { levels: 5, size: 5, colors: 7 },
+  { levels: 5, size: 5, colors: 7 },
+  // Zone 3
+  { levels: 5, size: 5, colors: 8 },
+  { levels: 5, size: 6, colors: 8 },
+  { levels: 5, size: 6, colors: 9 },
+  { levels: 5, size: 6, colors: 9 },
+  { levels: 5, size: 6, colors: 10 }
 ];
 
 const CURVE: ReadonlyArray<readonly [number, number]> = CURVE_SPANS.flatMap(
