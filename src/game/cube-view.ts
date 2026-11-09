@@ -62,6 +62,15 @@ const ICON_LIFT = 0.029;
 /** Start/stop icon edge length, as a fraction of the square size. */
 const ICON_SIZE = 0.62;
 
+/** Length of the level-start flight, in seconds. */
+const INTRO_DURATION = 1.5;
+/** How far behind its rest position the cube starts, along the view direction. */
+const INTRO_DISTANCE = 20;
+/** Full turns the cube spins on its way in. */
+const INTRO_TURNS = 1.25;
+/** Tumble axis of the flight, tilted off the vertical so the spin reads in 3D. */
+const INTRO_AXIS = new pc.Vec3(0.35, 1, 0.2).normalize();
+
 /** Top of a tile above the cube face plane. */
 const TILE_TOP = TILE_OFFSET - 0.5 + TILE_THICKNESS / 2;
 /** Stitch thread radius, as a fraction of the tile width. */
@@ -388,6 +397,12 @@ export class CubeRenderer {
   readonly layout: CubeLayout;
   readonly level: Level;
 
+  /** Parent of `root` that carries the level-start flight; `root` keeps the lean. */
+  private readonly stage: pc.Entity;
+  private introTime = 0;
+  private readonly introFrom = new pc.Vec3();
+  private readonly introQuat = new pc.Quat();
+
   private readonly camera: pc.Entity;
   private readonly canvas: HTMLCanvasElement;
   private readonly tiles: pc.Entity[] = [];
@@ -444,8 +459,10 @@ export class CubeRenderer {
       this.hoverMaterials.push(this.makeMaterial(hex, "#ffffff", 0.2, true));
     }
 
+    this.stage = new pc.Entity("cube-stage");
+    app.root.addChild(this.stage);
     this.root = new pc.Entity("cube-root");
-    app.root.addChild(this.root);
+    this.stage.addChild(this.root);
     this.root.setLocalRotation(new pc.Quat());
 
     // The body is the visible surface beneath the squares: one closed box with
@@ -493,6 +510,10 @@ export class CubeRenderer {
     this.iconMarks.addComponent("render");
     this.root.addChild(this.iconMarks);
     this.rebuildMarkers();
+
+    // Start far down the view direction so the first frame is already in flight.
+    this.introFrom.copy(camera.forward).mulScalar(INTRO_DISTANCE);
+    this.updateIntro(0);
   }
 
   // -------------------------------------------------------------------------
@@ -804,6 +825,25 @@ export class CubeRenderer {
   }
 
   // -------------------------------------------------------------------------
+  // level-start flight: the cube spins in from far away to a hard stop
+  // -------------------------------------------------------------------------
+
+  private updateIntro(dt: number): void {
+    if (this.introTime >= INTRO_DURATION) return;
+    this.introTime += dt;
+    // Ease-in cubic: creeps away, then accelerates into a hard stop at t = 1.
+    const t = Math.min(1, this.introTime / INTRO_DURATION);
+    const remaining = 1 - t * t * t;
+    this.stage.setLocalPosition(
+      this.introFrom.x * remaining,
+      this.introFrom.y * remaining,
+      this.introFrom.z * remaining
+    );
+    this.introQuat.setFromAxisAngle(INTRO_AXIS, INTRO_TURNS * 360 * remaining);
+    this.stage.setLocalRotation(this.introQuat);
+  }
+
+  // -------------------------------------------------------------------------
   // picking
   // -------------------------------------------------------------------------
 
@@ -1013,6 +1053,7 @@ export class CubeRenderer {
 
   update(dt: number): void {
     this.time += dt;
+    this.updateIntro(dt);
     this.updateTilt(dt);
 
     this.updateGlow(dt);
@@ -1029,7 +1070,7 @@ export class CubeRenderer {
 
   destroy(): void {
     this.clearGlow();
-    this.root.destroy();
+    this.stage.destroy();
     for (const mesh of this.stitchMeshes) mesh.destroy();
     this.emptyMaterial.destroy();
     this.emptyHoverMaterial.destroy();
