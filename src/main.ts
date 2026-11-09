@@ -51,6 +51,16 @@ function navigate(index: number | null): void {
 
 window.addEventListener("popstate", route);
 
+/** Fades out the inline loader from index.html and reveals the page (idempotent). */
+function dismissBoot(): void {
+  const boot = document.getElementById("boot");
+  if (!boot || boot.classList.contains("is-leaving")) return;
+  document.documentElement.classList.remove("is-booting");
+  boot.classList.add("is-leaving");
+  // Matches the #boot opacity transition in index.html.
+  setTimeout(() => boot.remove(), 400);
+}
+
 // ---------------------------------------------------------------------------
 
 function showLevels(): void {
@@ -58,6 +68,7 @@ function showLevels(): void {
   session = null;
   canvas!.classList.add("is-hidden");
   screens.showLevels(save);
+  dismissBoot();
 }
 
 async function startLevel(index: number): Promise<void> {
@@ -83,12 +94,14 @@ async function startLevel(index: number): Promise<void> {
       if (hintedThisLevel) return;
       hintedThisLevel = true;
       screens.toast("Every square needs a colour", 3200);
-    }
+    },
+    onHint: (message) => screens.toast(message, 3200)
   });
 
   if (index === 0 && !save.completed.includes(0)) {
-    screens.toast("Drag between the two squares of a colour", 6000);
+    screens.toast("Tap or drag: fill the squares between two matching squares", 6000);
   }
+  dismissBoot();
 }
 
 function handleSolved(index: number): void {

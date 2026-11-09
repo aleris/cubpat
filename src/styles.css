@@ -1,12 +1,18 @@
 :root {
-  --bg: #07080c;
   --text: #eef1f8;
   --muted: #8a93a8;
   --line: rgba(255, 255, 255, 0.1);
   --panel: rgba(255, 255, 255, 0.055);
   --panel-strong: rgba(255, 255, 255, 0.1);
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
+  /* Page background and colour-scheme live in the inline <style> in index.html (first paint). */
+}
+
+/* Registered so the solved button's rainbow border can be animated. */
+@property --rainbow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 * {
@@ -21,10 +27,6 @@ body {
 body {
   margin: 0;
   overflow: hidden;
-  background:
-    radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
-    radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
-    var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
@@ -178,20 +180,12 @@ body {
   border-radius: 18px;
   background: transparent;
   cursor: pointer;
-  transition:
-    transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
-    background 0.22s ease,
-    border-color 0.22s ease;
+  transition: border-color 0.22s ease;
 }
 
+/* The current level is the only cell with a frame; hover never adds one. */
 .cell.current {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.cell:not(.locked):hover {
-  transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .cell.locked {
@@ -227,37 +221,59 @@ body {
 
 /* ------------------------------------------------------------------ solved */
 
-/* Bottom-right dock: the cube stays fully visible and unblurred. */
-.solved-dock {
+/* Top-centre slot: one plain icon button with an animated rainbow ring. */
+.solved-top {
   position: fixed;
-  z-index: 20;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 6;
+  top: max(0px, env(safe-area-inset-top));
+  left: 0;
+  right: 0;
   display: flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  background: rgba(14, 17, 25, 0.92);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  justify-content: center;
+  padding-top: 12px;
+  pointer-events: none;
   animation: rise 0.3s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
-.solved-dock .icon-btn {
-  background: var(--panel);
+.solved-top .icon-btn {
+  position: relative;
+  pointer-events: auto;
 }
 
-.solved-dock .icon-btn:hover {
-  background: var(--panel-strong);
+/* Hollow ring: a masked conic gradient, so the centre stays fully transparent. */
+.solved-top .icon-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--rainbow-angle),
+    #ff4d6d,
+    #ffb020,
+    #ffe066,
+    #4ade80,
+    #22d3ee,
+    #6366f1,
+    #a855f7,
+    #ff4d6d
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  animation: rainbow-spin 2.4s linear infinite;
+  pointer-events: none;
 }
 
-.solved-dock .solved-next {
-  color: #eaf7ff;
-  background: rgba(191, 233, 255, 0.16);
-}
-
-.solved-dock .solved-next:hover {
-  background: rgba(191, 233, 255, 0.24);
+@keyframes rainbow-spin {
+  to {
+    --rainbow-angle: 360deg;
+  }
 }
 
 /* ------------------------------------------------------------------ toast */

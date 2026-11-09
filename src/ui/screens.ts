@@ -12,8 +12,14 @@ export interface ScreenHooks {
 const MINI_RES = 192;
 /** Fraction of each tile kept when insetting it: the seam width is uniform. */
 const MINI_TILE = 0.88;
+/** Mirrors TILE_CORNER in cube-view.ts: corner radius as a fraction of the tile edge. */
+const MINI_CORNER = 0.22;
+/** Cubic bezier control offset for a quarter circle of unit radius. */
+const ARC_K = 0.5523;
 const MINI_BODY = "#05060a";
 const MINI_EMPTY = "#1d222e";
+/** Mirrors `repeat(5, …)` in `.level-grid` in styles.css. */
+const GRID_COLUMNS = 5;
 
 export class Screens {
   private readonly hooks: ScreenHooks;
@@ -26,12 +32,14 @@ export class Screens {
   private readonly hudLevelNum: HTMLElement;
   private readonly complete: HTMLElement;
   private readonly nextButton: HTMLButtonElement;
+  private readonly menuButton: HTMLButtonElement;
   private readonly toastEl: HTMLElement;
 
   private readonly cache = new Map<number, Level>();
   private readonly cells: HTMLElement[] = [];
   private readonly doneState: boolean[] = [];
   private toastTimer = 0;
+  private tabStop = 0;
 
   constructor(masterSeed: number, hooks: ScreenHooks) {
     this.masterSeed = masterSeed;
@@ -44,17 +52,24 @@ export class Screens {
     this.hudLevelNum = query("#hud-level-num");
     this.complete = query("#complete");
     this.nextButton = query<HTMLButtonElement>("#btn-next");
+    this.menuButton = query<HTMLButtonElement>("#btn-menu");
     this.toastEl = query("#toast");
 
     query("#btn-reset").addEventListener("click", () => this.hooks.onReset());
-    query("#btn-menu").addEventListener("click", () => this.hooks.onMenu());
-    query("#btn-complete-menu").addEventListener("click", () => this.hooks.onMenu());
+    this.menuButton.addEventListener("click", () => this.hooks.onMenu());
     this.nextButton.addEventListener("click", () => {
       const to = Number(this.complete.dataset.next ?? "-1");
       if (to >= 0 && to < LEVEL_COUNT) this.hooks.onPlay(to);
     });
 
     this.buildGrid();
+    arrowNav(this.grid, GRID_COLUMNS);
+    arrowNav(this.hud, 1);
+    arrowNav(this.complete, 1);
+    this.grid.addEventListener("focusin", (event) => {
+      const i = this.cells.indexOf(event.target as HTMLElement);
+      if (i >= 0) this.setTabStop(i);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -85,14 +100,26 @@ export class Screens {
         else cell.appendChild(mini);
       }
     }
+    let stop = this.cells.findIndex((cell) => cell.classList.contains("current"));
+    if (stop < 0) {
+      for (let i = LEVEL_COUNT - 1; i >= 0; i--) {
+        if (isUnlocked(save, i)) {
+          stop = i;
+          break;
+        }
+      }
+    }
+    this.setTabStop(Math.max(stop, 0));
   }
 
   showLevels(save: SaveData): void {
+    const fromGame = this.levelScreen.classList.contains("is-hidden");
     this.refresh(save);
     this.hideSolved();
     this.levelScreen.classList.remove("is-hidden");
     this.hud.classList.add("is-hidden");
     this.hudLevel.classList.add("is-hidden");
+    if (fromGame) this.cells[this.tabStop].focus({ preventScroll: true });
   }
 
   showGame(levelIndex: number): void {
@@ -103,12 +130,13 @@ export class Screens {
     this.hideSolved();
   }
 
-  /** Show the solved dock. `nextIndex` < 0 means there is no next level. */
+  /** Show the solved next-level button. `nextIndex` < 0 means there is no next level. */
   showSolved(nextIndex: number): void {
     const hasNext = nextIndex >= 0 && nextIndex < LEVEL_COUNT;
     this.complete.dataset.next = String(hasNext ? nextIndex : -1);
     this.nextButton.classList.toggle("is-hidden", !hasNext);
     this.complete.classList.remove("is-hidden");
+    (hasNext ? this.nextButton : this.menuButton).focus({ preventScroll: true });
   }
 
   hideSolved(): void {
@@ -145,6 +173,14 @@ export class Screens {
       this.cells.push(cell);
       this.doneState.push(false);
     }
+    this.setTabStop(0);
+  }
+
+  private setTabStop(index: number): void {
+    this.tabStop = index;
+    this.cells.forEach((cell, i) => {
+      cell.tabIndex = i === index ? 0 : -1;
+    });
   }
 }
 
@@ -179,15 +215,38 @@ function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
   const ox = MINI_RES / 2 - ((minX + maxX) / 2) * scale;
   const oy = MINI_RES / 2 - ((minY + maxY) / 2) * scale;
 
-  const trace = (quad: Quad, shrink: number): void => {
-    const cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
-    const cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+  // Quads are parallel projections of squares, so tracing the rounded square in
+  // the tile's own (u, v) space and mapping it affinely gives the exact
+  // projected corners (affine maps carry beziers to beziers).
+  const trace = (quad: Quad, shrink: number, corner: number): void => {
+    const [q0, q1, , q3] = quad;
+    const at = (u: number, v: number): [number, number] => [
+      ox + (q0.x + (q1.x - q0.x) * u + (q3.x - q0.x) * v) * scale,
+      oy + (q0.y + (q1.y - q0.y) * u + (q3.y - q0.y) * v) * scale
+    ];
+    const lo = (1 - shrink) / 2;
+    const hi = (1 + shrink) / 2;
+    const r = corner * shrink;
+    const k = r * ARC_K;
+    // corner (cu, cv) of the square, reached along -du and left along dv
+    const corners: ReadonlyArray<readonly [number, number, number, number, number, number]> = [
+      [hi, lo, 1, 0, 0, 1],
+      [hi, hi, 0, 1, -1, 0],
+      [lo, hi, -1, 0, 0, -1],
+      [lo, lo, 0, -1, 1, 0]
+    ];
     ctx.beginPath();
-    quad.forEach((p, i) => {
-      const x = ox + (cx + (p.x - cx) * shrink) * scale;
-      const y = oy + (cy + (p.y - cy) * shrink) * scale;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    corners.forEach(([cu, cv, iu, iv, eu, ev], i) => {
+      const start = at(cu - iu * r, cv - iv * r);
+      if (i === 0) ctx.moveTo(...start);
+      else ctx.lineTo(...start);
+      if (r > 0) {
+        ctx.bezierCurveTo(
+          ...at(cu - iu * (r - k), cv - iv * (r - k)),
+          ...at(cu + eu * (r - k), cv + ev * (r - k)),
+          ...at(cu + eu * r, cv + ev * r)
+        );
+      }
     });
     ctx.closePath();
   };
@@ -195,7 +254,7 @@ function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
   ctx.fillStyle = MINI_BODY;
   for (const face of quads) {
     for (const quad of face) {
-      trace(quad, 1);
+      trace(quad, 1, 0);
       ctx.fill();
     }
   }
@@ -203,13 +262,37 @@ function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
   quads.forEach((face, slot) => {
     face.forEach((quad, i) => {
       const color = colors[slot * n * n + i];
-      trace(quad, MINI_TILE);
+      trace(quad, MINI_TILE, MINI_CORNER);
       ctx.fillStyle = color >= 0 ? level.palette[color] : MINI_EMPTY;
       ctx.fill();
     });
   });
 
   return canvas;
+}
+
+/** Arrow/Home/End focus movement between visible buttons in `container`. */
+function arrowNav(container: HTMLElement, columns: number): void {
+  container.addEventListener("keydown", (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const items = Array.from(container.querySelectorAll<HTMLButtonElement>(":scope > button")).filter(
+      (el) => !el.classList.contains("is-hidden")
+    );
+    const current = items.indexOf(event.target as HTMLButtonElement);
+    if (current < 0) return;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft": next = current - 1; break;
+      case "ArrowRight": next = current + 1; break;
+      case "ArrowUp": next = current - columns; break;
+      case "ArrowDown": next = current + columns; break;
+      case "Home": next = 0; break;
+      case "End": next = items.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    if (next >= 0 && next < items.length && next !== current) items[next].focus();
+  });
 }
 
 function query<T extends HTMLElement>(selector: string): T {

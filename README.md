@@ -34,16 +34,25 @@ npm test           # level generator invariants (no browser needed)
   edges. Starting from the other square of the pair swaps the icons. The icons
   lie flat on their square, aligned with the tile grid, with ▶ pointing along
   the grid direction closest to screen right.
+- **Lifting keeps the path.** Release short of the second square and the colour
+  stays on the board. Press any coloured square to pick the path up again; it
+  truncates back to that square, then dragging continues from there. Pressing
+  the square the path starts from clears the whole path.
+- **Tap to fill.** A tap on a grey square that touches the open end of a path
+  colours it with the colour touched last, so a path can be built by tapping one
+  square after another. A tap on an empty square no path can reach shows an
+  instruction at the bottom of the screen.
 - **Backtracking.** Dragging back onto a square the path already covers removes
   the colour from that point forward.
-- **Release.** Release on the second square of the pair to complete the colour
-  (the path's squares light up one by one); release anywhere else and the path resets.
+- **Completion.** Reach the second square of the pair to link the colour (its
+  squares light up one by one); tapping the second square does the same once the
+  path reaches the square in front of it. A linked colour cannot grow any
+  further; pressing one of its squares reopens it for editing.
 - **Level solved** when every pair is linked *and* every square is coloured;
   linking the last pair with grey left over shows "Every square needs a colour".
-  Pressing an interior square of a completed path reopens it for editing.
 - **Reset** rebuilds the level, the **grid** button returns to the level screen.
-  Solving a level shows a small dock in the bottom-right corner (cube stays
-  visible and unblurred) with a next-level arrow and the **grid** button.
+  Solving a level reveals a next-level arrow near the top centre, ringed by a
+  slowly spinning rainbow border (cube stays fully visible and unblurred).
 
 Progress and the master seed live in `localStorage` (`cubpat.save.v1`). The
 level grid is 5×5; the next level unlocks only when the previous one is done.

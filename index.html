@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="is-booting">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -9,8 +9,81 @@
     <meta name="theme-color" content="#07080c" />
     <meta name="description" content="Link matching colours across a Rubik-style cube." />
     <title>Cubpat — colour paths on a cube</title>
+    <!-- Critical styles: inline so the first paint is already dark and only shows the loader,
+         before the bundle (and styles.css) has loaded. -->
+    <style>
+      html {
+        height: 100%;
+        color-scheme: dark;
+        background:
+          radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
+          radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
+          #07080c;
+      }
+      body {
+        margin: 0;
+      }
+      html.is-booting body > :not(#boot) {
+        visibility: hidden;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        transition: opacity 0.35s ease;
+      }
+      #boot.is-leaving {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .boot-face {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        padding: 6px;
+        border-radius: 14px;
+        background: #1c2130;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      }
+      .boot-face span {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        background: #313748;
+        animation: boot-path 1.8s ease-in-out calc(var(--i) * 0.09s) infinite;
+      }
+      @keyframes boot-path {
+        8%,
+        55% {
+          background: hsl(6 83% 58%);
+          box-shadow: 0 0 12px hsl(6 83% 58% / 0.55);
+        }
+        63%,
+        100% {
+          background: #313748;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-face span {
+          animation: none !important;
+          background: hsl(6 83% 58%);
+        }
+      }
+    </style>
   </head>
   <body>
+    <!-- Removed by main.ts once the first screen is ready. -->
+    <div id="boot" role="status" aria-label="Loading">
+      <!-- 3×3 cube face; --i is each square's step along a snake-shaped colour path. -->
+      <div class="boot-face" aria-hidden="true">
+        <span style="--i: 0"></span><span style="--i: 1"></span><span style="--i: 2"></span>
+        <span style="--i: 5"></span><span style="--i: 4"></span><span style="--i: 3"></span>
+        <span style="--i: 6"></span><span style="--i: 7"></span><span style="--i: 8"></span>
+      </div>
+    </div>
+
     <canvas id="scene" aria-label="Cube puzzle"></canvas>
 
     <div id="hud-level" class="hud-level is-hidden">
@@ -48,12 +121,12 @@
         <h1>Cubpat</h1>
         <p id="level-progress">0 / 25</p>
       </header>
-      <div id="level-grid" class="level-grid" role="grid" aria-label="Levels"></div>
+      <div id="level-grid" class="level-grid" role="group" aria-label="Levels"></div>
       <p class="legend">Link the colors. Fill every square.</p>
     </section>
 
-    <div id="complete" class="solved-dock is-hidden" role="group" aria-label="Level solved">
-      <button id="btn-next" class="icon-btn solved-next" type="button" aria-label="Next level" title="Next level">
+    <div id="complete" class="solved-top is-hidden" role="group" aria-label="Level solved">
+      <button id="btn-next" class="icon-btn" type="button" aria-label="Next level" title="Next level">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path
             d="M9 5.5 16 12l-7 6.5"
@@ -63,16 +136,6 @@
             stroke-linecap="round"
             stroke-linejoin="round"
           />
-        </svg>
-      </button>
-      <button id="btn-complete-menu" class="icon-btn" type="button" aria-label="Level select" title="Level select">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <g fill="currentColor">
-            <rect x="4" y="4" width="6.2" height="6.2" rx="1.6" />
-            <rect x="13.8" y="4" width="6.2" height="6.2" rx="1.6" />
-            <rect x="4" y="13.8" width="6.2" height="6.2" rx="1.6" />
-            <rect x="13.8" y="13.8" width="6.2" height="6.2" rx="1.6" />
-          </g>
         </svg>
       </button>
     </div>

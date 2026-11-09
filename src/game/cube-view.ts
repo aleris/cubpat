@@ -20,7 +20,25 @@ const FACE_EULER: ReadonlyArray<readonly [number, number, number]> = [
 
 const TILE_INSET = 0.12;
 const TILE_THICKNESS = 0.03;
+/** Tile corner radius, as a fraction of the tile edge. */
+const TILE_CORNER = 0.22;
+/** Segments per rounded tile corner. */
+const TILE_CORNER_SEGMENTS = 6;
+/** Radius of the rounded top edge, as a fraction of the tile thickness. */
+const TILE_BEVEL = 0.55;
+/** Segments across the rounded top edge. */
+const TILE_BEVEL_SEGMENTS = 4;
 const TILE_OFFSET = 0.5 + 0.006;
+
+/**
+ * Radius of the cube body's edge bevel (world units). Small enough to hide
+ * under the squares: the nearest square edge is at most 0.06/size from a face
+ * edge (0.01 at size 6) and tiles sink 0.009 into the body, so the bevel never
+ * leaves a gap beneath a tile.
+ */
+const BODY_BEVEL = 0.02;
+/** Segments across each quarter of the body bevel. */
+const BODY_BEVEL_SEGMENTS = 4;
 const PICK_HALF = 0.5 + TILE_THICKNESS;
 const TILT_DURATION = 0.24;
 
@@ -87,6 +105,214 @@ function pushQuad(
     m.uvs.push(u, v);
   }
   m.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/**
+ * Tile slab, `size` square by `thickness` deep, centred on the origin: a
+ * rounded rectangle whose top edge is rounded over by a quarter circle. Built
+ * at its real size (not scaled from a unit mesh) so the bevel stays circular.
+ * The outline runs counter-clockwise seen from +Z.
+ */
+function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickness: number): pc.Mesh {
+  const corner = TILE_CORNER * size;
+  // insetting the outline by the bevel must leave a valid rounded rectangle
+  const bevel = Math.min(TILE_BEVEL * thickness, corner);
+  const c = size / 2 - corner;
+  const top = thickness / 2;
+  const outline: Array<[number, number, number, number]> = [];
+  const centres: ReadonlyArray<readonly [number, number]> = [[c, c], [-c, c], [-c, -c], [c, -c]];
+  centres.forEach(([cx, cy], k) => {
+    for (let s = 0; s <= TILE_CORNER_SEGMENTS; s++) {
+      const a = ((k + s / TILE_CORNER_SEGMENTS) * Math.PI) / 2;
+      const nx = Math.cos(a);
+      const ny = Math.sin(a);
+      outline.push([cx + nx * corner, cy + ny * corner, nx, ny]);
+    }
+  });
+  const count = outline.length;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+
+  // Rings of the outline from the bottom edge up over the bevel: the bottom
+  // ring, then the bevel profile from vertical (start of the arc, which also
+  // tops the straight wall) to horizontal (edge of the top cap).
+  const ring = (inset: number, z: number, nh: number, nz: number): number => {
+    const base = positions.length / 3;
+    for (const [x, y, nx, ny] of outline) {
+      positions.push(x - nx * inset, y - ny * inset, z);
+      normals.push(nx * nh, ny * nh, nz);
+    }
+    return base;
+  };
+  const rings = [ring(0, -top, 1, 0)];
+  for (let s = 0; s <= TILE_BEVEL_SEGMENTS; s++) {
+    const t = ((s / TILE_BEVEL_SEGMENTS) * Math.PI) / 2;
+    rings.push(ring(bevel * (1 - Math.cos(t)), top - bevel + bevel * Math.sin(t), Math.cos(t), Math.sin(t)));
+  }
+  for (let r = 0; r + 1 < rings.length; r++) {
+    const lo = rings[r];
+    const hi = rings[r + 1];
+    for (let i = 0; i < count; i++) {
+      const j = (i + 1) % count;
+      indices.push(lo + i, lo + j, hi + j, lo + i, hi + j, hi + i);
+    }
+  }
+
+  // top cap: fan over the last ring, whose normals already point up
+  const topRing = rings[rings.length - 1];
+  const topCentre = positions.length / 3;
+  positions.push(0, 0, top);
+  normals.push(0, 0, 1);
+  for (let i = 0; i < count; i++) indices.push(topCentre, topRing + i, topRing + ((i + 1) % count));
+
+  // bottom cap: own vertices, facing down
+  const bottomRing = ring(0, -top, 0, -1);
+  const bottomCentre = positions.length / 3;
+  positions.push(0, 0, -top);
+  normals.push(0, 0, -1);
+  for (let i = 0; i < count; i++) indices.push(bottomCentre, bottomRing + ((i + 1) % count), bottomRing + i);
+
+  const mesh = new pc.Mesh(device);
+  mesh.setPositions(positions);
+  mesh.setNormals(normals);
+  mesh.setIndices(indices);
+  mesh.update(pc.PRIMITIVE_TRIANGLES);
+  return mesh;
+}
+
+/**
+ * Cube body, `half` from the origin to each face with every edge and corner
+ * rounded over by `radius`: flat face quads, quarter-cylinder edges and sphere
+ * octant corners. Together they close the box exactly, and the normals are
+ * analytic everywhere so the bevel reads as one smooth surface. Every triangle
+ * is wound to face along its vertex normals.
+ */
+function roundedCubeData(half: number, radius: number): MeshData {
+  const flat = half - radius;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+
+  const vertex = (p: Vec, n: Vec): number => {
+    const index = positions.length / 3;
+    positions.push(p[0], p[1], p[2]);
+    normals.push(n[0], n[1], n[2]);
+    return index;
+  };
+
+  /** Triangle a-b-c, reversed when its winding fights the vertex normals. */
+  const tri = (a: number, b: number, c: number): void => {
+    const ax = positions[a * 3];
+    const ay = positions[a * 3 + 1];
+    const az = positions[a * 3 + 2];
+    const bx = positions[b * 3];
+    const by = positions[b * 3 + 1];
+    const bz = positions[b * 3 + 2];
+    const cx = positions[c * 3];
+    const cy = positions[c * 3 + 1];
+    const cz = positions[c * 3 + 2];
+    const gx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+    const gy = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+    const gz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const nx = normals[a * 3] + normals[b * 3] + normals[c * 3];
+    const ny = normals[a * 3 + 1] + normals[b * 3 + 1] + normals[c * 3 + 1];
+    const nz = normals[a * 3 + 2] + normals[b * 3 + 2] + normals[c * 3 + 2];
+    if (gx * nx + gy * ny + gz * nz < 0) indices.push(a, c, b);
+    else indices.push(a, b, c);
+  };
+  const quad = (a: number, b: number, c: number, d: number): void => {
+    tri(a, b, c);
+    tri(a, c, d);
+  };
+
+  // flat faces: the box plane inset by the bevel radius
+  for (let axis = 0; axis < 3; axis++) {
+    const u = (axis + 1) % 3;
+    const v = (axis + 2) % 3;
+    const n: Vec = [0, 0, 0];
+    for (const sign of [1, -1]) {
+      n[axis] = sign;
+      const corner = (su: number, sv: number): number => {
+        const p: Vec = [0, 0, 0];
+        p[axis] = sign * half;
+        p[u] = su * flat;
+        p[v] = sv * flat;
+        return vertex(p, n);
+      };
+      quad(corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1));
+    }
+  }
+
+  // edges: quarter cylinders between the two adjacent flat faces
+  for (let k = 0; k < 3; k++) {
+    const i = (k + 1) % 3;
+    const j = (k + 2) % 3;
+    for (const si of [1, -1]) {
+      for (const sj of [1, -1]) {
+        const ring = (depth: number): number[] => {
+          const ringIndices: number[] = [];
+          for (let s = 0; s <= BODY_BEVEL_SEGMENTS; s++) {
+            const t = ((s / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
+            const n: Vec = [0, 0, 0];
+            n[i] = si * Math.cos(t);
+            n[j] = sj * Math.sin(t);
+            const p: Vec = [0, 0, 0];
+            p[i] = si * flat + n[i] * radius;
+            p[j] = sj * flat + n[j] * radius;
+            p[k] = depth;
+            ringIndices.push(vertex(p, n));
+          }
+          return ringIndices;
+        };
+        const lo = ring(-flat);
+        const hi = ring(flat);
+        for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) quad(lo[s], lo[s + 1], hi[s + 1], hi[s]);
+      }
+    }
+  }
+
+  // corners: sphere octants, fanned from the point where they meet a face
+  for (const sx of [1, -1]) {
+    for (const sy of [1, -1]) {
+      for (const sz of [1, -1]) {
+        const centre: Vec = [sx * flat, sy * flat, sz * flat];
+        const pole = vertex([sx * half, sy * flat, sz * flat], [sx, 0, 0]);
+        let inner: number[] = [];
+        for (let r = 1; r <= BODY_BEVEL_SEGMENTS; r++) {
+          const a = ((r / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
+          const ring: number[] = [];
+          for (let s = 0; s <= BODY_BEVEL_SEGMENTS; s++) {
+            const b = ((s / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
+            const n: Vec = [
+              sx * Math.cos(a),
+              sy * Math.sin(a) * Math.cos(b),
+              sz * Math.sin(a) * Math.sin(b)
+            ];
+            ring.push(vertex(madd(centre, n, radius), n));
+          }
+          if (r === 1) {
+            for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) tri(pole, ring[s], ring[s + 1]);
+          } else {
+            for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) quad(inner[s], inner[s + 1], ring[s + 1], ring[s]);
+          }
+          inner = ring;
+        }
+      }
+    }
+  }
+
+  return { positions, normals, uvs: [], indices };
+}
+
+function roundedCubeMesh(device: pc.GraphicsDevice, half: number, radius: number): pc.Mesh {
+  const data = roundedCubeData(half, radius);
+  const mesh = new pc.Mesh(device);
+  mesh.setPositions(data.positions);
+  mesh.setNormals(data.normals);
+  mesh.setIndices(data.indices);
+  mesh.update(pc.PRIMITIVE_TRIANGLES);
+  return mesh;
 }
 
 /** Atlas: left cell = start (play triangle), right cell = stop (rounded square). */
@@ -157,7 +383,7 @@ export class CubeRenderer {
   private readonly camera: pc.Entity;
   private readonly canvas: HTMLCanvasElement;
   private readonly tiles: pc.Entity[] = [];
-  private readonly tileScale: number;
+  private readonly tileMesh: pc.Mesh;
 
   private readonly emptyMaterial: pc.StandardMaterial;
   private readonly emptyHoverMaterial: pc.StandardMaterial;
@@ -201,8 +427,6 @@ export class CubeRenderer {
     this.owners.set(level.initial);
     this.tileGlow = new Float32Array(level.layout.count);
 
-    this.tileScale = (1 / level.size) * (1 - TILE_INSET);
-
     this.emptyMaterial = this.makeMaterial("#313748", "#000000", 0);
     this.emptyHoverMaterial = this.makeMaterial("#525a72", "#12151f", 0);
     for (let i = 0; i < level.palette.length; i++) {
@@ -215,18 +439,21 @@ export class CubeRenderer {
     app.root.addChild(this.root);
     this.root.setLocalRotation(new pc.Quat());
 
-    // The body is the visible surface beneath the squares: one closed box, so
-    // the faces meet at the edges without any seam.
+    // The body is the visible surface beneath the squares: one closed box with
+    // bevelled edges and corners, so the faces meet without a seam and the
+    // silhouette catches a highlight instead of a razor edge.
+    this.device = app.graphicsDevice;
     this.bodyMaterial = this.makeMaterial("#1c2130", "#1c2130", 0.04);
     const body = new pc.Entity("cube-body");
-    body.addComponent("render", { type: "box", material: this.bodyMaterial });
-    body.setLocalScale(1, 1, 1);
+    body.addComponent("render");
+    body.render!.meshInstances = [
+      new pc.MeshInstance(roundedCubeMesh(this.device, 0.5, BODY_BEVEL), this.bodyMaterial)
+    ];
     this.root.addChild(body);
-
+    this.tileMesh = roundedTileMesh(this.device, (1 / level.size) * (1 - TILE_INSET), TILE_THICKNESS);
     for (let i = 0; i < level.layout.count; i++) this.createTile(i);
     this.applyMaterials();
 
-    this.device = app.graphicsDevice;
     this.dashMaterial = new pc.StandardMaterial();
     this.dashMaterial.useLighting = false;
     this.dashMaterial.diffuse = new pc.Color(0, 0, 0);
@@ -292,8 +519,8 @@ export class CubeRenderer {
     const face = this.layout.face[index];
     const basis = FACES[face];
     const entity = new pc.Entity(`tile-${index}`);
-    entity.addComponent("render", { type: "box", material: this.emptyMaterial });
-    entity.setLocalScale(this.tileScale, this.tileScale, TILE_THICKNESS);
+    entity.addComponent("render");
+    entity.render!.meshInstances = [new pc.MeshInstance(this.tileMesh, this.emptyMaterial)];
     entity.setLocalPosition(
       this.layout.center[index * 3] + basis.n[0] * (TILE_OFFSET - 0.5),
       this.layout.center[index * 3 + 1] + basis.n[1] * (TILE_OFFSET - 0.5),
@@ -340,8 +567,8 @@ export class CubeRenderer {
       let material: pc.Material;
       if (color < 0) material = highlighted ? this.emptyHoverMaterial : this.emptyMaterial;
       else material = highlighted ? this.hoverMaterials[color] : this.colorMaterials[color];
-      const render = this.tiles[i].render;
-      if (render && render.material !== material) render.material = material;
+      const instance = this.tiles[i].render!.meshInstances[0];
+      if (instance.material !== material) instance.material = material;
     }
   }
 
@@ -588,9 +815,10 @@ export class CubeRenderer {
       mat.depthWrite = false;
       mat.update();
       const overlay = new pc.Entity("path-glow");
-      overlay.addComponent("render", { type: "box", material: mat });
+      overlay.addComponent("render");
+      overlay.render!.meshInstances = [new pc.MeshInstance(this.tileMesh, mat)];
       overlay.setLocalScale(1, 1, 0.1);
-      overlay.setLocalPosition(0, 0, 0.5 + 0.05 + 0.02);
+      overlay.setLocalPosition(0, 0, TILE_THICKNESS * (0.5 + 0.05 + 0.02));
       overlay.enabled = false;
       this.tiles[square].addChild(overlay);
       overlays.push(overlay);
@@ -677,8 +905,7 @@ export class CubeRenderer {
       if (i === this.hover) scale = 1.055;
       else if (i === this.head) scale = 1.04 * breathe;
       scale = Math.max(scale, 1 + 0.08 * this.tileGlow[i]);
-      const s = this.tileScale * scale;
-      this.tiles[i].setLocalScale(s, s, TILE_THICKNESS);
+      this.tiles[i].setLocalScale(scale, scale, 1);
     }
   }
 
