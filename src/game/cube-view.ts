@@ -65,12 +65,12 @@ const ICON_SIZE = 0.62;
 /** Top of a tile above the cube face plane. */
 const TILE_TOP = TILE_OFFSET - 0.5 + TILE_THICKNESS / 2;
 /** Stitch thread radius, as a fraction of the tile width. */
-const STITCH_RADIUS = 0.03;
+const STITCH_RADIUS = 0.1;
 /**
  * Each stitch foot sits this fraction of a tile width in from the tile edge
  * facing the other tile, so a loop is a third of a width wide on either side.
  */
-const STITCH_FOOT = 1 / 3;
+const STITCH_FOOT = 1 / 6;
 /** How deep a stitch end sinks into the tile, as a multiple of its radius. */
 const STITCH_SINK = 0.5;
 /** Segments along a stitch (the half torus). */

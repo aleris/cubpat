@@ -101,7 +101,6 @@ async function startLevel(index: number): Promise<void> {
   if (index === 0 && !save.completed.includes(0)) {
     screens.toast("Tap or drag: fill the squares between two matching squares", 6000);
   }
-  (globalThis as Record<string, unknown>).__cubpat = session;
   dismissBoot();
 }
 

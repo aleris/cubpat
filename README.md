@@ -36,11 +36,15 @@ npm test           # level generator invariants (no browser needed)
   ~35 degrees that would bring another face into view, so the visible three never
   change.
 - **Path markers.** While a colour has a path (being dragged or linked), the
-  square it was started from shows a ▶ icon, its pair shows a ■ icon, and a
-  dashed line runs through the centres of the path's squares, folding over cube
-  edges. Starting from the other square of the pair swaps the icons. The icons
-  lie flat on their square, aligned with the tile grid, with ▶ pointing along
-  the grid direction closest to screen right.
+  square it was started from shows a ▶ icon, its pair shows a ■ icon, and every
+  two neighbouring squares of the path are joined by a 3D stitch: a half-torus
+  tube in the colour of the tiles, arching out of the surface over the gap
+  between them. A stitch ends a third of a tile width in from the tile edge
+  facing its neighbour, and one that links squares across a cube edge lifts
+  clear of both tiles and arches over the bevel. Starting from the other square
+  of the pair swaps the icons. The icons lie flat on their square, aligned with
+  the tile grid, with ▶ pointing along the grid direction closest to screen
+  right.
 - **Lifting keeps the path.** Release short of the second square and the colour
   stays on the board. Press any coloured square to pick the path up again; it
   truncates back to that square, then dragging continues from there. Pressing
