@@ -10,11 +10,11 @@ path only, and the level is only complete when every square is coloured.
 ## Run
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173
-npm run build      # typecheck + production bundle in dist/
-npm run preview    # serve dist/
-npm test           # level generator invariants (no browser needed)
+pnpm install
+pnpm dev           # http://localhost:5173
+pnpm build         # typecheck + production bundle in dist/
+pnpm preview       # serve dist/
+pnpm test          # Vitest unit suite (no browser needed)
 ```
 
 ## Rules
@@ -124,14 +124,28 @@ src/ui/
   mini-cube.ts           level-screen mini cube canvas
 src/state/
   progress.ts            localStorage save (seed + completed levels)
+tests/                   Vitest suites, mirroring src/
+  core/                  maths, palette, RNG, layout, view, curve, levels,
+                         solver, mini-cube projection
+  play/                  drag/tap session rules
+  render/                procedural mesh geometry
+  state/                 save persistence
+vitest.config.ts         node environment, 60 s test timeout
 ```
 
 ## Verification
 
-`npm test` (Node only, no browser) checks:
+`pnpm test` runs the Vitest suite (Node only, no browser):
 
+- vector and quaternion algebra, including rotation composition and length
+  preservation;
+- seeded randomness: FNV-1a hashing, replayable `mulberry32` streams, unsigned
+  seeds, range guarantees and in-place shuffling;
+- `hslToHex` conversion, hue wrapping and the golden-angle palette's distinct
+  prefixes;
 - the play field for sizes 2–6: `3·n²` squares, corner/border/interior degrees,
-  connected, hidden faces unpickable;
+  connected, reciprocal neighbours, centre/outward projection round trips,
+  hidden faces unpickable;
 - the lean keeps exactly the three play faces visible and never exceeds its cap,
   aimed from every square centre and from the whole rim of the three faces
   (the pointer can now lean the cube from anywhere on its surface), and always
@@ -154,3 +168,15 @@ src/state/
   the drawing, so seams are evenly spaced and colour runs stay continuous across
   face edges. Each cube is drawn once into a canvas instead of a CSS 3D grid of
   elements, which used to round the tile gaps differently on every tile.
+- session rules, driven through the real pointer handlers with a stubbed
+  renderer: drag to extend, release short of the target, press-to-truncate,
+  tap-to-grow, tap-to-link, hints for unreachable grey squares, reset, and
+  listener/renderer disposal;
+- procedural mesh geometry: quad vertex/normal/UV layout, stitch tube radius and
+  winding, index offsets when appending, and degenerate inputs;
+- save persistence: fresh saves, unsigned seed normalization, filtering
+  malformed completed entries, corrupt/missing data fallback, completion
+  dedupe/sort, and storage write failures.
+
+The PlayCanvas renderer, scene bootstrap and DOM screens still need a browser;
+those paths are covered by runtime smoke checks rather than this Node suite.
