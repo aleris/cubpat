@@ -28,10 +28,13 @@ npm test           # level generator invariants (no browser needed)
   over, up to 18 degrees, continuously on every pointer move rather than only
   when the square under it changes: the touched square becomes the most frontal
   part of the view and the squares around it slide towards the pointer, so
-  reaching a neighbour costs roughly half the pointer travel. The lean settles
-  back when the pointer leaves the cube, and swings back upright with a touch.
-  The cap stays well below the ~35 degrees that would bring another face into
-  view, so the visible three never change.
+  reaching a neighbour costs roughly half the pointer travel. Off the cube the
+  aim point stays on the nearest bit of surface and the lean fades with the
+  distance past it, so the pointer keeps steering just outside the silhouette
+  while a pointer far from the cube barely tips the view; crossing the edge never
+  jumps. A lifted touch lets the cube stand upright. The cap stays well below the
+  ~35 degrees that would bring another face into view, so the visible three never
+  change.
 - **Path markers.** While a colour has a path (being dragged or linked), the
   square it was started from shows a ▶ icon, its pair shows a ■ icon, and a
   dashed line runs through the centres of the path's squares, folding over cube

@@ -42,6 +42,14 @@ const BODY_BEVEL_SEGMENTS = 4;
 const PICK_HALF = 0.5 + TILE_THICKNESS;
 /** Time constant of the lean as it follows the pointer, in seconds. */
 const TILT_FOLLOW = 0.08;
+/**
+ * Distance beyond the cube over which the lean fades out, in cube widths.
+ * The pointer keeps steering the cube just outside the silhouette, and a
+ * pointer far from it barely tips the view.
+ */
+const LEAN_FADE = 0.18;
+
+const clampHalf = (v: number): number => (v < -PICK_HALF ? -PICK_HALF : v > PICK_HALF ? PICK_HALF : v);
 
 const GLOW_RISE = 0.08;
 const GLOW_SETTLE = 0.3;
@@ -49,18 +57,26 @@ const GLOW_SUSTAIN = 0.4;
 const GLOW_HOLD = 0.25;
 const GLOW_FADE = 0.35;
 
-/** Lift of the dashed path line above the cube surface (clears tiles and glow). */
-const PATH_LIFT = 0.026;
-/** Lift of the start/stop icons above the cube surface (above the dashes). */
+/** Lift of the start/stop icons above the cube surface (above the stitches). */
 const ICON_LIFT = 0.029;
-/** Dash width, as a fraction of the square size. */
-const DASH_WIDTH = 0.08;
-/** Dash length, as a fraction of the square size. */
-const DASH_LENGTH = 0.18;
-/** Gap between dashes, as a fraction of the square size. */
-const DASH_GAP = 0.13;
 /** Start/stop icon edge length, as a fraction of the square size. */
 const ICON_SIZE = 0.62;
+
+/** Top of a tile above the cube face plane. */
+const TILE_TOP = TILE_OFFSET - 0.5 + TILE_THICKNESS / 2;
+/** Stitch thread radius, as a fraction of the tile width. */
+const STITCH_RADIUS = 0.03;
+/**
+ * Each stitch foot sits this fraction of a tile width in from the tile edge
+ * facing the other tile, so a loop is a third of a width wide on either side.
+ */
+const STITCH_FOOT = 1 / 3;
+/** How deep a stitch end sinks into the tile, as a multiple of its radius. */
+const STITCH_SINK = 0.5;
+/** Segments along a stitch (the half torus). */
+const STITCH_ARC_SEGMENTS = 14;
+/** Segments around the stitch thread. */
+const STITCH_TUBE_SEGMENTS = 8;
 
 type Vec = [number, number, number];
 
@@ -353,15 +369,6 @@ function drawIconAtlas(): HTMLCanvasElement {
   return canvas;
 }
 
-interface Segment {
-  p0: Vec;
-  dir: Vec;
-  n: Vec;
-  face: number;
-  start: number;
-  len: number;
-}
-
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -392,9 +399,9 @@ export class CubeRenderer {
   private readonly hoverMaterials: pc.StandardMaterial[] = [];
   private readonly bodyMaterial: pc.StandardMaterial;
   private readonly device: pc.GraphicsDevice;
-  private readonly pathMarks: pc.Entity;
+  private readonly stitchMarks: pc.Entity;
   private readonly iconMarks: pc.Entity;
-  private readonly dashMaterial: pc.StandardMaterial;
+  private readonly stitchMeshes: pc.Mesh[] = [];
   private readonly iconMaterial: pc.StandardMaterial;
   private readonly iconTexture: pc.Texture;
 
@@ -407,6 +414,7 @@ export class CubeRenderer {
   /** Lean the cube follows: the surface under the pointer, turned to the camera. */
   private readonly tiltTarget = new pc.Quat();
   private readonly tiltTmp = new pc.Quat();
+  private readonly tiltUpright = new pc.Quat();
   private readonly focusPoint: Vec = [0, 0, 0];
 
   private glow: GlowState | null = null;
@@ -455,13 +463,6 @@ export class CubeRenderer {
     for (let i = 0; i < level.layout.count; i++) this.createTile(i);
     this.applyMaterials();
 
-    this.dashMaterial = new pc.StandardMaterial();
-    this.dashMaterial.useLighting = false;
-    this.dashMaterial.diffuse = new pc.Color(0, 0, 0);
-    this.dashMaterial.emissive = new pc.Color().fromString("#f4f6ff");
-    this.dashMaterial.cull = pc.CULLFACE_NONE;
-    this.dashMaterial.update();
-
     this.iconTexture = new pc.Texture(this.device, {
       width: 256,
       height: 128,
@@ -485,9 +486,9 @@ export class CubeRenderer {
     this.iconMaterial.cull = pc.CULLFACE_NONE;
     this.iconMaterial.update();
 
-    this.pathMarks = new pc.Entity("path-marks");
-    this.pathMarks.addComponent("render");
-    this.root.addChild(this.pathMarks);
+    this.stitchMarks = new pc.Entity("stitch-marks");
+    this.stitchMarks.addComponent("render");
+    this.root.addChild(this.stitchMarks);
     this.iconMarks = new pc.Entity("icon-marks");
     this.iconMarks.addComponent("render");
     this.root.addChild(this.iconMarks);
@@ -573,7 +574,7 @@ export class CubeRenderer {
   }
 
   // -------------------------------------------------------------------------
-  // path markers: start/stop icons and a dashed line through the path
+  // path markers: start/stop icons and a stitch loop between each pair
   // -------------------------------------------------------------------------
 
   private centreOf(square: number): Vec {
@@ -583,7 +584,7 @@ export class CubeRenderer {
 
   private rebuildMarkers(): void {
     const s = 1 / this.level.size;
-    const dashes: MeshData = { positions: [], normals: [], uvs: [], indices: [] };
+    const stitches = new Map<number, MeshData>();
     const icons: MeshData = { positions: [], normals: [], uvs: [], indices: [] };
     const half = (ICON_SIZE * s) / 2;
     // Icons lie flat on their square, aligned with the tile grid. Of the four
@@ -614,70 +615,125 @@ export class CubeRenderer {
         pushQuad(icons, madd(this.centreOf(square), n, ICON_LIFT), ax, cross(n, ax), half, half, n, u0, u0 + 0.5, 1, 0);
       }
 
-      if (path.length >= 2) {
-        const trimEnd = path[path.length - 1] === stop ? ICON_SIZE * s * 0.45 : 0;
-        this.pushDashes(dashes, path, s, ICON_SIZE * s * 0.45, trimEnd);
+      for (let k = 0; k + 1 < path.length; k++) {
+        let data = stitches.get(c);
+        if (!data) {
+          data = { positions: [], normals: [], uvs: [], indices: [] };
+          stitches.set(c, data);
+        }
+        this.pushStitch(data, path[k], path[k + 1], s);
       }
     }
 
-    this.setMarkerMesh(this.pathMarks, dashes, this.dashMaterial);
+    this.setStitches(stitches);
     this.setMarkerMesh(this.iconMarks, icons, this.iconMaterial);
   }
 
-  private pushDashes(m: MeshData, path: readonly number[], s: number, trimStart: number, trimEnd: number): void {
-    // polyline on the raised cube surface; every segment keeps its face normal
-    const segments: Segment[] = [];
-    let total = 0;
-    const addSegment = (p0: Vec, p1: Vec, face: number): void => {
-      const d = madd(p1, p0, -1);
-      const len = Math.hypot(d[0], d[1], d[2]);
-      if (len < 1e-9) return;
-      segments.push({
-        p0,
-        dir: [d[0] / len, d[1] / len, d[2] / len],
-        n: FACES[face].n as Vec,
-        face,
-        start: total,
-        len
-      });
-      total += len;
-    };
-    for (let k = 0; k + 1 < path.length; k++) {
-      const fa = this.layout.face[path[k]];
-      const fb = this.layout.face[path[k + 1]];
-      const nA = FACES[fa].n as Vec;
-      const nB = FACES[fb].n as Vec;
-      const A = this.centreOf(path[k]);
-      const B = this.centreOf(path[k + 1]);
-      if (fa === fb) {
-        addSegment(madd(A, nA, PATH_LIFT), madd(B, nA, PATH_LIFT), fa);
-      } else {
-        const E = madd(A, nB, 0.5 - dot(A, nB));
-        const E2 = madd(madd(E, nA, PATH_LIFT), nB, PATH_LIFT);
-        addSegment(madd(A, nA, PATH_LIFT), E2, fa);
-        addSegment(E2, madd(B, nB, PATH_LIFT), fb);
-      }
-    }
+  /**
+   * One stitch linking neighbouring squares `a` and `b`: a half torus in the
+   * colour of their path, its feet a third of a tile width in from the tile
+   * edge facing the other square. Same-face links arch straight over the gap
+   * between the tiles; links across a cube edge lift both feet clear of the
+   * tiles, so the loop bridges the cube's bevel instead of cutting into it.
+   */
+  private pushStitch(m: MeshData, a: number, b: number, s: number): void {
+    const fa = this.layout.face[a];
+    const fb = this.layout.face[b];
+    const nA = FACES[fa].n as Vec;
+    const nB = FACES[fb].n as Vec;
+    const A = this.centreOf(a);
+    const B = this.centreOf(b);
+    const width = s * (1 - TILE_INSET);
+    const radius = width * STITCH_RADIUS;
+    // a third of a width in from the edge leaves the foot one sixth of a
+    // width from the square's centre, on the side of the linked square
+    const reach = width * (0.5 - STITCH_FOOT);
+    const lift = TILE_TOP - STITCH_SINK * radius;
 
-    const end = total - trimEnd;
-    const period = (DASH_LENGTH + DASH_GAP) * s;
-    const width = DASH_WIDTH * s;
-    for (let d0 = trimStart; d0 < end; d0 += period) {
-      const d1 = Math.min(end, d0 + DASH_LENGTH * s);
-      for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i];
-        const lo = Math.max(d0, seg.start);
-        const hi = Math.min(d1, seg.start + seg.len);
-        if (hi <= lo) continue;
-        let a = lo - seg.start;
-        let b = hi - seg.start;
-        // fill corners at turns within a face; cube-edge joints meet exactly
-        if (lo > d0 && i > 0 && segments[i - 1].face === seg.face) a -= width / 2;
-        if (hi < d1 && i + 1 < segments.length && segments[i + 1].face === seg.face) b += width / 2;
-        const centre = madd(seg.p0, seg.dir, (a + b) / 2);
-        pushQuad(m, centre, seg.dir, cross(seg.n, seg.dir), (b - a) / 2, width / 2, seg.n, 0, 0, 0, 0);
+    let pA: Vec;
+    let pB: Vec;
+    let bulge: Vec;
+    if (fa === fb) {
+      const d = madd(B, A, -1);
+      const len = Math.hypot(d[0], d[1], d[2]);
+      const along: Vec = [d[0] / len, d[1] / len, d[2] / len];
+      pA = madd(madd(A, along, reach), nA, lift);
+      pB = madd(madd(B, along, -reach), nA, lift);
+      bulge = nA;
+    } else {
+      // On a square's face the step to a shared cube edge runs along the
+      // other face's normal, so the feet stay on their faces.
+      pA = madd(madd(A, nB, reach), nA, lift);
+      pB = madd(madd(B, nA, reach), nB, lift);
+      bulge = [nA[0] + nB[0], nA[1] + nB[1], nA[2] + nB[2]];
+    }
+    this.pushHalfTorus(m, pA, pB, bulge, radius);
+  }
+
+  /**
+   * Half a torus: the semicircular arc from `pA` to `pB` that rises along
+   * `bulge`, swept as a tube of `radius`. The ends are open but buried in the
+   * tiles, and the winding matches the outward tube normals.
+   */
+  private pushHalfTorus(m: MeshData, pA: Vec, pB: Vec, bulge: Vec, radius: number): void {
+    const chord = madd(pB, pA, -1);
+    const len = Math.hypot(chord[0], chord[1], chord[2]);
+    if (len < 1e-6) return;
+    const e1: Vec = [chord[0] / len, chord[1] / len, chord[2] / len];
+    const rise = madd(bulge, e1, -dot(bulge, e1));
+    const riseLen = Math.hypot(rise[0], rise[1], rise[2]);
+    if (riseLen < 1e-6) return;
+    const e2: Vec = [rise[0] / riseLen, rise[1] / riseLen, rise[2] / riseLen];
+    const axis = cross(e1, e2);
+    const centre = madd(pA, chord, 0.5);
+    const major = len / 2;
+
+    const base = m.positions.length / 3;
+    for (let i = 0; i <= STITCH_ARC_SEGMENTS; i++) {
+      const theta = (i / STITCH_ARC_SEGMENTS) * Math.PI;
+      const ct = Math.cos(theta);
+      const st = Math.sin(theta);
+      const radial: Vec = [e1[0] * ct + e2[0] * st, e1[1] * ct + e2[1] * st, e1[2] * ct + e2[2] * st];
+      const ring = madd(centre, radial, major);
+      for (let j = 0; j <= STITCH_TUBE_SEGMENTS; j++) {
+        const phi = (j / STITCH_TUBE_SEGMENTS) * Math.PI * 2;
+        const cp = Math.cos(phi);
+        const sp = Math.sin(phi);
+        const nx = radial[0] * cp + axis[0] * sp;
+        const ny = radial[1] * cp + axis[1] * sp;
+        const nz = radial[2] * cp + axis[2] * sp;
+        m.positions.push(ring[0] + nx * radius, ring[1] + ny * radius, ring[2] + nz * radius);
+        m.normals.push(nx, ny, nz);
+        m.uvs.push(0, 0);
       }
     }
+    for (let i = 0; i < STITCH_ARC_SEGMENTS; i++) {
+      for (let j = 0; j < STITCH_TUBE_SEGMENTS; j++) {
+        const lo = base + i * (STITCH_TUBE_SEGMENTS + 1) + j;
+        const hi = lo + STITCH_TUBE_SEGMENTS + 1;
+        m.indices.push(lo, hi, hi + 1, lo, hi + 1, lo + 1);
+      }
+    }
+  }
+
+  /** One lit 3D mesh per colour: the stitches share the tile's own material. */
+  private setStitches(byColor: Map<number, MeshData>): void {
+    for (const mesh of this.stitchMeshes) mesh.destroy();
+    this.stitchMeshes.length = 0;
+    const instances: pc.MeshInstance[] = [];
+    for (const [color, data] of byColor) {
+      if (data.indices.length === 0) continue;
+      const mesh = new pc.Mesh(this.device);
+      mesh.setPositions(data.positions);
+      mesh.setNormals(data.normals);
+      mesh.setIndices(data.indices);
+      mesh.update(pc.PRIMITIVE_TRIANGLES);
+      this.stitchMeshes.push(mesh);
+      instances.push(new pc.MeshInstance(mesh, this.colorMaterials[color]));
+    }
+    const render = this.stitchMarks.render!;
+    render.meshInstances = instances;
+    this.stitchMarks.enabled = instances.length > 0;
   }
 
   private setMarkerMesh(entity: pc.Entity, data: MeshData, material: pc.Material): void {
@@ -712,15 +768,22 @@ export class CubeRenderer {
     // Rest frame: the root only rotates about the origin, so world space is
     // also the untransformed cube space. Deliberately not the leaned frame:
     // the aim must be a function of the pointer alone or it feeds back on itself.
-    if (!this.screenRay(clientX, clientY) || !this.hitCube(this.tmpA, this.tmpB, this.tmpC)) {
+    if (!this.screenRay(clientX, clientY)) {
       this.clearCursor();
       return;
     }
+    const miss = this.aimPoint(this.tmpA, this.tmpB, this.tmpC);
     this.focusPoint[0] = this.tmpC.x;
     this.focusPoint[1] = this.tmpC.y;
     this.focusPoint[2] = this.tmpC.z;
     const q = tiltQuat(this.focusPoint, TILT_MAX);
-    this.tiltTarget.set(q[0], q[1], q[2], q[3]);
+    // Off the cube the aim point stays on the nearest bit of surface, and the
+    // lean fades with the distance past it: steering keeps working just outside
+    // the edge, and a pointer far away barely tips the view. Nothing jumps as
+    // the pointer crosses the silhouette.
+    const fade = 1 / (1 + (miss / LEAN_FADE) ** 2);
+    this.tiltTmp.set(q[0], q[1], q[2], q[3]);
+    this.tiltTarget.slerp(this.tiltUpright, this.tiltTmp, fade);
   }
 
   /** Rest the cube upright (pointer off the cube, or a touch lifted). */
@@ -767,11 +830,12 @@ export class CubeRenderer {
   private hitCube(origin: pc.Vec3, dir: pc.Vec3, out: pc.Vec3): boolean {
     let tmin = -Infinity;
     let tmax = Infinity;
+    let beside = false;
     for (let axis = 0; axis < 3; axis++) {
       const o = axis === 0 ? origin.x : axis === 1 ? origin.y : origin.z;
       const d = axis === 0 ? dir.x : axis === 1 ? dir.y : dir.z;
       if (Math.abs(d) < 1e-9) {
-        if (Math.abs(o) > PICK_HALF) return false;
+        if (Math.abs(o) > PICK_HALF) beside = true;
         continue;
       }
       let t1 = (-PICK_HALF - o) / d;
@@ -783,11 +847,58 @@ export class CubeRenderer {
       }
       if (t1 > tmin) tmin = t1;
       if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) return false;
     }
-    if (tmin < 0 || tmax < 0) return false;
+    if (beside || tmin < 0 || tmin > tmax) return false;
     out.copy(dir).scale(tmin).add(origin);
     return true;
+  }
+
+  /**
+   * Point of the cube the lean aims at: the entry point when the ray hits, and
+   * the nearest point of the cube when it misses, so the aim stays defined and
+   * continuous as the pointer crosses the silhouette. Returns the distance from
+   * the ray to the cube, zero when it hits.
+   */
+  private aimPoint(origin: pc.Vec3, dir: pc.Vec3, out: pc.Vec3): number {
+    if (this.hitCube(origin, dir, out)) return 0;
+
+    // The squared distance from a ray point to the box is convex in the ray
+    // parameter, so its slope is monotone and a bisection lands on the minimum.
+    // Clamping alternately does not: near an edge it crawls, and an unconverged
+    // answer makes the aim jump as the pointer crosses the silhouette.
+    let hi = Math.max(-(origin.x * dir.x + origin.y * dir.y + origin.z * dir.z), 0);
+    for (let i = 0; i < 24 && this.cubeSlope(origin, dir, hi) < 0; i++) hi = hi > 0 ? hi * 2 : 0.5;
+    let lo = 0;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) * 0.5;
+      if (this.cubeSlope(origin, dir, mid) < 0) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    out.copy(dir).scale((lo + hi) * 0.5).add(origin);
+    const miss = Math.hypot(
+      out.x - clampHalf(out.x),
+      out.y - clampHalf(out.y),
+      out.z - clampHalf(out.z)
+    );
+    out.set(clampHalf(out.x), clampHalf(out.y), clampHalf(out.z));
+    return miss;
+  }
+
+  /**
+   * Half the slope of the squared distance from the point at `t` on the ray to
+   * the cube: the signed excess over each face times the ray direction.
+   */
+  private cubeSlope(origin: pc.Vec3, dir: pc.Vec3, t: number): number {
+    const x = origin.x + dir.x * t;
+    const y = origin.y + dir.y * t;
+    const z = origin.z + dir.z * t;
+    const ex = x > PICK_HALF ? x - PICK_HALF : x < -PICK_HALF ? x + PICK_HALF : 0;
+    const ey = y > PICK_HALF ? y - PICK_HALF : y < -PICK_HALF ? y + PICK_HALF : 0;
+    const ez = z > PICK_HALF ? z - PICK_HALF : z < -PICK_HALF ? z + PICK_HALF : 0;
+    return ex * dir.x + ey * dir.y + ez * dir.z;
   }
 
   pick(clientX: number, clientY: number): number | null {
@@ -919,12 +1030,12 @@ export class CubeRenderer {
   destroy(): void {
     this.clearGlow();
     this.root.destroy();
+    for (const mesh of this.stitchMeshes) mesh.destroy();
     this.emptyMaterial.destroy();
     this.emptyHoverMaterial.destroy();
     for (const mat of this.colorMaterials) mat.destroy();
     for (const mat of this.hoverMaterials) mat.destroy();
     this.bodyMaterial.destroy();
-    this.dashMaterial.destroy();
     this.iconMaterial.destroy();
     this.iconTexture.destroy();
   }

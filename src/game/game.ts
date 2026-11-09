@@ -126,6 +126,7 @@ export class LevelSession {
     this.renderer.setCursor(e.clientX, e.clientY);
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
+      this.canvas.style.cursor = "default";
       this.renderer.setHover(-1);
       return;
     }
