@@ -4,10 +4,13 @@ import { LevelSession } from "./play/level-session.ts";
 import { createGameApp } from "./render/scene.ts";
 import { isUnlocked, loadSave, recordCompletion } from "./state/progress.ts";
 import { Screens } from "./ui/screens.ts";
+import { decorateTitle } from "./ui/title.ts";
 
 const save = loadSave();
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 if (!canvas) throw new Error("#scene canvas missing");
+
+decorateTitle();
 
 const screens = new Screens(save.seed, {
   onPlay: (index) => navigate(index),

@@ -26,7 +26,7 @@ export function hslToHex(h: number, s: number, l: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-const PALETTE_SIZE = 20;
+export const PALETTE_SIZE = 20;
 const PALETTE: string[] = Array.from({ length: PALETTE_SIZE }, (_, i) => {
   const hue = (i * 137.508 + 6) % 360;
   const lightness = i % 3 === 0 ? 0.58 : i % 3 === 1 ? 0.66 : 0.52;
