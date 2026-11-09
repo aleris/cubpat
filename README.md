@@ -62,8 +62,8 @@ npm test           # level generator invariants (no browser needed)
 - **Level solved** when every pair is linked *and* every square is coloured;
   linking the last pair with grey left over shows "Every square needs a colour".
 - **Reset** rebuilds the level, the **grid** button returns to the level screen.
-  Solving a level reveals a next-level arrow near the top centre, ringed by a
-  slowly spinning rainbow border (cube stays fully visible and unblurred).
+  Solving a level reveals a wide `>>>` next-level button at the bottom centre,
+  ringed by a slowly spinning rainbow border (cube stays fully visible and unblurred).
 
 Progress and the master seed live in `localStorage` (`cubpat.save.v1`). The
 level grid is 5×5; the next level unlocks only when the previous one is done.

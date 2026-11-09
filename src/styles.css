@@ -6,6 +6,8 @@
   --panel-strong: rgba(255, 255, 255, 0.1);
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
   /* Page background and colour-scheme live in the inline <style> in index.html (first paint). */
+  /* HUD side margin: at least 16px, and wide enough to keep the HUD within 960px. */
+  --hud-gutter: max(16px, calc((100vw - 960px) / 2));
 }
 
 /* Registered so the solved button's rainbow border can be animated. */
@@ -63,7 +65,7 @@ body {
   position: fixed;
   z-index: 6;
   top: max(0px, env(safe-area-inset-top));
-  right: max(16px, env(safe-area-inset-right));
+  right: max(var(--hud-gutter), env(safe-area-inset-right));
   display: flex;
   gap: 10px;
 }
@@ -72,7 +74,7 @@ body {
   position: fixed;
   z-index: 6;
   top: max(0px, env(safe-area-inset-top));
-  left: max(16px, env(safe-area-inset-left));
+  left: max(var(--hud-gutter), env(safe-area-inset-left));
   height: 44px;
   display: flex;
   align-items: center;
@@ -221,27 +223,27 @@ body {
 
 /* ------------------------------------------------------------------ solved */
 
-/* Top-centre slot: one plain icon button with an animated rainbow ring. */
-.solved-top {
+/* Bottom-centre slot: one wide icon button with an animated rainbow ring. */
+.solved-bottom {
   position: fixed;
   z-index: 6;
-  top: max(0px, env(safe-area-inset-top));
+  bottom: calc(24px + env(safe-area-inset-bottom));
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
-  padding-top: 12px;
   pointer-events: none;
   animation: rise 0.3s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
-.solved-top .icon-btn {
+.solved-bottom .icon-btn {
   position: relative;
+  width: 88px;
   pointer-events: auto;
 }
 
 /* Hollow ring: a masked conic gradient, so the centre stays fully transparent. */
-.solved-top .icon-btn::before {
+.solved-bottom .icon-btn::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -303,6 +305,11 @@ body {
 .toast.show {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* Toasts clear the next-level button while it is shown. */
+#complete:not(.is-hidden) ~ .toast {
+  bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
 @keyframes rise {
