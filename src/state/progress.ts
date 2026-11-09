@@ -2,7 +2,7 @@
  *  pure function of (seed, level index), so a saved seed replays the same run. */
 
 const KEY = "cubpat.save.v1";
-const DEBUG_DEV_MODE_ON = true;
+export const DEBUG_DEV_MODE_ON = true;
 
 export interface SaveData {
   seed: number;

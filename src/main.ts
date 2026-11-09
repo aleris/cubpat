@@ -2,7 +2,7 @@ import "./styles.css";
 import { LEVEL_COUNT, ZONES } from "./core/curve.ts";
 import { LevelSession } from "./play/level-session.ts";
 import { createGameApp } from "./render/scene.ts";
-import { isUnlocked, loadSave, recordCompletion } from "./state/progress.ts";
+import { DEBUG_DEV_MODE_ON, isUnlocked, loadSave, recordCompletion } from "./state/progress.ts";
 import { Screens } from "./ui/screens.ts";
 import { decorateTitle } from "./ui/title.ts";
 
@@ -15,6 +15,7 @@ decorateTitle();
 const screens = new Screens(save.seed, {
   onPlay: (index) => navigate(index),
   onZone: (zoneIndex) => navigateArea(zoneIndex),
+  onZoneCleared: (zoneIndex) => navigateArea(zoneIndex, true),
   onReset: () => session?.reset(),
   onMenu: () => navigateArea(screens.area)
 });
@@ -67,7 +68,11 @@ function navigate(index: number): void {
   route();
 }
 
-function navigateArea(area: number): void {
+/** Area whose menu should animate in after the Next button finishes a zone. */
+let pendingCelebration = -1;
+
+function navigateArea(area: number, celebrate = false): void {
+  pendingCelebration = celebrate ? area : -1;
   history.pushState(null, "", `#/area/${area + 1}`);
   route();
 }
@@ -90,7 +95,9 @@ function showLevels(area?: number): void {
   session?.dispose();
   session = null;
   canvas!.classList.add("is-hidden");
-  screens.showLevels(save, area);
+  const celebrate = area !== undefined && area === pendingCelebration;
+  pendingCelebration = -1;
+  screens.showLevels(save, area, celebrate);
   dismissBoot();
 }
 
@@ -134,6 +141,18 @@ function handleSolved(index: number): void {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (
+    DEBUG_DEV_MODE_ON &&
+    event.code === "KeyS" &&
+    event.metaKey &&
+    event.altKey &&
+    event.ctrlKey &&
+    event.shiftKey
+  ) {
+    event.preventDefault();
+    session?.solveNow();
+    return;
+  }
   if (event.key === "Escape" && session) navigateArea(screens.area);
 });
 

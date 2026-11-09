@@ -200,24 +200,27 @@ body {
 
 
 .zone-head {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
 }
 
 .zone-tabs {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   flex-wrap: wrap;
   gap: clamp(18px, 4vw, 36px);
 }
 
 .zone-tab {
-  position: relative;
   appearance: none;
-  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--muted-soft);
@@ -230,20 +233,52 @@ body {
   transition: color 0.18s ease;
 }
 
+.zone-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 7px;
+  white-space: nowrap;
+}
+
+.zone-tab-icon {
+  display: inline-flex;
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.zone-tab-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Progress of the selected area, sitting directly under its tab. */
+.zone-tab-sub {
+  min-height: 1.1em;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.18s ease;
+}
+
 .zone-tab:hover:not(:disabled),
 .zone-tab[aria-selected="true"] {
   color: var(--text);
 }
 
-.zone-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 1px;
-  background: currentColor;
-  opacity: 0.8;
+.zone-tab[aria-selected="true"] .zone-tab-sub {
+  color: var(--muted-strong);
+}
+
+.zone-tab[data-state="todo"] .zone-tab-icon {
+  color: var(--muted);
+}
+
+.zone-tab[data-state="done"] .zone-tab-icon {
+  color: #7fe3a5;
 }
 
 .zone-tab:disabled {
@@ -256,13 +291,64 @@ body {
   outline-offset: 4px;
 }
 
-.zone-progress {
-  margin: 0;
-  color: var(--muted-strong);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
+/* One shared tab line; JS slides it between tabs so it visibly travels. */
+.zone-underline {
+  position: absolute;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zone-underline.is-rainbow {
+  background-image: linear-gradient(
+    90deg,
+    #ff4d6d,
+    #ffb020,
+    #ffe066,
+    #4ade80,
+    #22d3ee,
+    #6366f1,
+    #a855f7,
+    #ff4d6d
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
+  animation: rainbow-sweep 1.2s linear infinite;
+}
+
+/* A newly activated area's name sweeps through the palette. */
+.zone-tab.is-celebrating .zone-tab-name {
+  background-image: linear-gradient(
+    90deg,
+    #ff4d6d,
+    #ffb020,
+    #ffe066,
+    #4ade80,
+    #22d3ee,
+    #6366f1,
+    #a855f7,
+    #ff4d6d
+  );
+  background-repeat: repeat;
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: rainbow-sweep 1.1s linear infinite;
+}
+
+@keyframes rainbow-sweep {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* The area swap is in flight: the new cells are visible but not yet clickable. */
+.level-grid.is-celebrating {
+  pointer-events: none;
 }
 
 /* Keep the title and area tabs at the top; the legend rides the bottom. */

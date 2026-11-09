@@ -69,7 +69,9 @@ Progress and the master seed live in `localStorage` (`cubpat.save.v1`). The
 level screen groups the 75 levels into three 25-level area tabs (Foundations,
 Expansion, Mastery); each tab shows a 5×5 grid and the next level unlocks only
 when the previous one is done. Areas not yet reached stay disabled, except when
-`DEBUG_DEV_MODE_ON` unlocks every level.
+`DEBUG_DEV_MODE_ON` unlocks every level; in that mode
+`Cmd+Alt+Ctrl+Shift+S` solves the level in play, which makes the area-complete
+transition easy to exercise (solve 1–24, then 25).
 The open level is in the URL (`#/level/3`), and the active area tab is in the
 URL (`#/area/2`), so a refresh keeps both. The browser's back/forward buttons
 move between levels and area tabs. Locked, out-of-range or unknown URLs fall

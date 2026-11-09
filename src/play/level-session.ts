@@ -98,6 +98,23 @@ export class LevelSession {
     this.renderer.setBoard(this.owners, this.paths);
   }
 
+  /** Dev shortcut: install the generated solution and report the level solved. */
+  solveNow(): void {
+    if (this.solved) return;
+    this.drag = null;
+    this.activeColor = -1;
+    for (let color = 0; color < this.level.colors; color++) {
+      const path = this.level.solution[color];
+      this.paths[color] = path.slice();
+      for (const square of path) this.owners[square] = color;
+      this.refreshComplete(color);
+    }
+    this.solved = this.isSolved();
+    this.renderer.setHead(-1);
+    this.renderer.setBoard(this.owners, this.paths);
+    if (this.solved) this.callbacks.onSolved();
+  }
+
   // -------------------------------------------------------------------------
   // pointer handling
   // -------------------------------------------------------------------------
