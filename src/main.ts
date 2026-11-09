@@ -1,8 +1,8 @@
 import "./styles.css";
-import { createGameApp } from "./game/app.ts";
-import { LevelSession } from "./game/game.ts";
-import { LEVEL_COUNT } from "./game/levels.ts";
-import { isUnlocked, loadSave, recordCompletion } from "./progress.ts";
+import { LEVEL_COUNT } from "./core/curve.ts";
+import { LevelSession } from "./play/level-session.ts";
+import { createGameApp } from "./render/scene.ts";
+import { isUnlocked, loadSave, recordCompletion } from "./state/progress.ts";
 import { Screens } from "./ui/screens.ts";
 
 const save = loadSave();

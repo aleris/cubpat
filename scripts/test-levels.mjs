@@ -6,22 +6,13 @@
  * the surface maths hold for every level of several seeds.
  */
 
-import {
-  FACES,
-  PLAY_FACES,
-  TILT_MAX,
-  VIEW_DIR,
-  buildLayout,
-  neighborCount,
-  projectToSquare,
-  quatIdentity,
-  quatRotate,
-  tiltQuat,
-  visibleFaceCount
-} from "../src/game/layout.ts";
-import { LEVEL_CONFIGS, LEVEL_COUNT, generateLevel, solvedColors, validateLevel } from "../src/game/levels.ts";
-import { miniQuads } from "../src/game/preview.ts";
-import { checkPairsConnected, checkSolution, countCovering, solveCovering } from "../src/game/solver.ts";
+import { LEVEL_CONFIGS, LEVEL_COUNT } from "../src/core/curve.ts";
+import { FACES, PLAY_FACES, buildLayout, neighborCount, projectToSquare } from "../src/core/layout.ts";
+import { generateLevel, validateLevel } from "../src/core/level.ts";
+import { quatIdentity, quatRotate } from "../src/core/math.ts";
+import { miniQuads } from "../src/core/preview.ts";
+import { checkPairsConnected, checkSolution, countCovering, solveCovering } from "../src/core/solver.ts";
+import { TILT_MAX, VIEW_DIR, tiltQuat, visibleFaceCount } from "../src/core/view.ts";
 
 let failures = 0;
 const fail = (message) => {

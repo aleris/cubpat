@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
-import { CubeRenderer } from "./cube-view.ts";
-import { areAdjacent } from "./layout.ts";
-import type { Level } from "./levels.ts";
+import { areAdjacent } from "../core/layout.ts";
+import type { Level } from "../core/level.ts";
+import { CubeRenderer } from "../render/cube-renderer.ts";
 
 interface DragState {
   color: number;

@@ -4,9 +4,10 @@
  * The camera sits on the (1,1,1) diagonal, so exactly three faces face it:
  * front (+Z), right (+X) and top (+Y). Those three faces are the play field
  * (3·n² squares); the other three are never visible and never clickable.
+ * View and lean maths live in `view.ts`.
  */
 
-export type Vec3 = [number, number, number];
+import type { Vec3 } from "./math.ts";
 
 export interface FaceBasis {
   /** outward normal */
@@ -170,98 +171,4 @@ export function areAdjacent(layout: CubeLayout, a: number, b: number): boolean {
     if (layout.next[a * 4 + d] === b) return true;
   }
   return false;
-}
-
-// ---------------------------------------------------------------------------
-// Quaternion helpers (plain tuples, so this module stays engine independent)
-// ---------------------------------------------------------------------------
-
-export type Quat = [number, number, number, number]; // x, y, z, w
-
-export function quatIdentity(): Quat {
-  return [0, 0, 0, 1];
-}
-
-export function quatMul(a: Quat, b: Quat): Quat {
-  const [ax, ay, az, aw] = a;
-  const [bx, by, bz, bw] = b;
-  return [
-    aw * bx + ax * bw + ay * bz - az * by,
-    aw * by - ax * bz + ay * bw + az * bx,
-    aw * bz + ax * by - ay * bx + az * bw,
-    aw * bw - ax * bx - ay * by - az * bz
-  ];
-}
-
-/** Rotate `v` by `q`. */
-export function quatRotate(q: Quat, v: Vec3): Vec3 {
-  const [x, y, z, w] = q;
-  const tx = 2 * (y * v[2] - z * v[1]);
-  const ty = 2 * (z * v[0] - x * v[2]);
-  const tz = 2 * (x * v[1] - y * v[0]);
-  return [
-    v[0] + w * tx + (y * tz - z * ty),
-    v[1] + w * ty + (z * tx - x * tz),
-    v[2] + w * tz + (x * ty - y * tx)
-  ];
-}
-
-// ---------------------------------------------------------------------------
-// View: the camera direction and the small lean towards the active square
-// ---------------------------------------------------------------------------
-
-/** Camera direction: (1,1,1) normalised, looking at the cube centre. */
-export const VIEW_DIR: Vec3 = (() => {
-  const k = 1 / Math.sqrt(3);
-  return [k, k, k];
-})();
-
-/**
- * How far the cube leans towards the point under the pointer, in radians.
- * This is the whole cursor affordance: leaning the touched part of the surface
- * towards the camera slides the surrounding squares under the pointer, so a
- * square is reached with less pointer travel. The cap keeps the three play
- * faces facing the camera (another face needs a rotation past ~35 degrees).
- */
-export const TILT_MAX = (18 * Math.PI) / 180;
-
-const clamp = (value: number, min: number, max: number): number =>
-  value < min ? min : value > max ? max : value;
-
-/**
- * Lean of the cube (local -> world) that points the given cube-local direction
- * as far towards the camera as possible, capped at `maxAngle`. Identity when
- * the point already lies on the camera axis.
- */
-export function tiltQuat(point: Vec3, maxAngle: number = TILT_MAX): Quat {
-  const len = Math.hypot(point[0], point[1], point[2]);
-  if (len < 1e-6) return quatIdentity();
-  const d: Vec3 = [point[0] / len, point[1] / len, point[2] / len];
-  const dot = clamp(d[0] * VIEW_DIR[0] + d[1] * VIEW_DIR[1] + d[2] * VIEW_DIR[2], -1, 1);
-  const angle = Math.acos(dot);
-  if (angle < 1e-5) return quatIdentity();
-
-  let axis: Vec3 = [
-    d[1] * VIEW_DIR[2] - d[2] * VIEW_DIR[1],
-    d[2] * VIEW_DIR[0] - d[0] * VIEW_DIR[2],
-    d[0] * VIEW_DIR[1] - d[1] * VIEW_DIR[0]
-  ];
-  const axisLen = Math.hypot(axis[0], axis[1], axis[2]);
-  if (axisLen < 1e-9) return quatIdentity();
-  axis = [axis[0] / axisLen, axis[1] / axisLen, axis[2] / axisLen];
-
-  const half = Math.min(angle, maxAngle) * 0.5;
-  const s = Math.sin(half);
-  return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(half)];
-}
-
-/** Number of cube faces whose normal points towards the camera. The play field
- *  is only valid while this stays at three. */
-export function visibleFaceCount(q: Quat): number {
-  let count = 0;
-  for (const basis of FACES) {
-    const n = quatRotate(q, basis.n);
-    if (n[0] * VIEW_DIR[0] + n[1] * VIEW_DIR[1] + n[2] * VIEW_DIR[2] > 1e-6) count++;
-  }
-  return count;
 }

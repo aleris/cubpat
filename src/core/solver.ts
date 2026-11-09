@@ -17,7 +17,7 @@
  * and fall back to `checkPairsConnected` plus the generator's own solution.
  */
 
-import type { Level } from "./levels.ts";
+import type { Level } from "./level.ts";
 
 export interface SolveOptions {
   /** Search node budget; pass 2 gives up and returns null above it. */

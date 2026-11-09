@@ -8,105 +8,18 @@
  * then only exposes the two endpoint squares of each path; the generator's own
  * paths are a guaranteed solution, so every level is solvable by construction.
  *
- * Difficulty is graded by the hand tuned curve below: cube size and colour count
- * both grow, while the average path length shrinks (longer, easier snakes early
- * on; short, tangled ones later).
+ * Difficulty is graded by `curve.ts`: cube size and colour count both grow,
+ * while the average path length shrinks (longer, easier snakes early on; short,
+ * tangled ones later).
  */
 
-import {
-  areAdjacent,
-  buildLayout,
-  type CubeLayout
-} from "./layout.ts";
+import type { LevelConfig } from "./curve.ts";
+import { areAdjacent, buildLayout, type CubeLayout } from "./layout.ts";
+import { colorFor } from "./palette.ts";
 import { mulberry32, seedForLevel, shuffleInPlace } from "./rng.ts";
-
-export interface LevelConfig {
-  index: number;
-  size: number;
-  colors: number;
-}
-
-/** Grading curve for the 25 levels: [cube size, colour count].
- *  Only three faces are in play (3·n² squares), so a level has 2·colors
- *  pre-coloured squares and colours·(3n²/colors) squares in the solution. */
-const CURVE: ReadonlyArray<readonly [number, number]> = [
-  [2, 2],
-  [2, 2],
-  [3, 3],
-  [3, 3],
-  [3, 4],
-  [4, 4],
-  [4, 5],
-  [4, 6],
-  [4, 6],
-  [5, 7],
-  [5, 7],
-  [5, 8],
-  [5, 8],
-  [5, 9],
-  [6, 10],
-  [6, 10],
-  [6, 11],
-  [6, 11],
-  [6, 12],
-  [6, 12],
-  [6, 13],
-  [6, 13],
-  [6, 14],
-  [6, 14],
-  [6, 15]
-];
-
-export const LEVEL_COUNT = CURVE.length;
-
-export const LEVEL_CONFIGS: LevelConfig[] = CURVE.map(([size, colors], i) => ({
-  index: i,
-  size,
-  colors
-}));
 
 /** A colour path must always have two endpoints plus at least two inner squares. */
 const MIN_PATH = 4;
-
-// ---------------------------------------------------------------------------
-// Palette: golden angle hues so any prefix stays visually distinct.
-// ---------------------------------------------------------------------------
-
-function hslToHex(h: number, s: number, l: number): string {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const hp = ((h % 360) + 360) % 360 / 60;
-  const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hp < 1) [r, g, b] = [c, x, 0];
-  else if (hp < 2) [r, g, b] = [x, c, 0];
-  else if (hp < 3) [r, g, b] = [0, c, x];
-  else if (hp < 4) [r, g, b] = [0, x, c];
-  else if (hp < 5) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const m = l - c / 2;
-  const to = (v: number): string => {
-    const n = Math.round(Math.min(1, Math.max(0, v + m)) * 255);
-    return n.toString(16).padStart(2, "0");
-  };
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-
-const PALETTE_SIZE = 20;
-const PALETTE: string[] = Array.from({ length: PALETTE_SIZE }, (_, i) => {
-  const hue = (i * 137.508 + 6) % 360;
-  const lightness = i % 3 === 0 ? 0.58 : i % 3 === 1 ? 0.66 : 0.52;
-  return hslToHex(hue, 0.83, lightness);
-});
-
-export function colorFor(index: number): string {
-  return PALETTE[index % PALETTE_SIZE];
-}
-
-// ---------------------------------------------------------------------------
-// Solved state: Hamiltonian path + cuts
-// ---------------------------------------------------------------------------
 
 /**
  * Warnsdorff-ordered randomised DFS for a Hamiltonian path over the surface

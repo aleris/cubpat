@@ -94,21 +94,36 @@ same run.
 4. Only the two endpoints of each run are coloured in the start state; the rest
    is grey.
 
-`src/game/levels.ts` holds the grading curve — cube size and colour count both
+`src/core/curve.ts` holds the grading curve — cube size and colour count both
 grow while the average path length shrinks (2×2 with 2 colours at level 1 up to
 6×6 with 15 colours at level 25).
 
 ## Layout
 
 ```
-src/game/layout.ts     three-face surface graph, lean quaternions
-src/game/levels.ts     seeded generation, grading curve, palette, validation
-src/game/cube-view.ts  PlayCanvas scene: tiles, materials, rotations, picking, glow
-src/game/game.ts       drag rules: extend, truncate, release, completion
-src/game/preview.ts    level-screen mini cube: isometric projection, one quad per tile
-src/game/app.ts        engine bootstrap, isometric camera, lights
-src/ui/screens.ts      level grid (5×5 mini cubes), HUD, solved dock
-src/progress.ts        localStorage save (seed + completed levels)
+src/main.ts              entry: hash routing, screens/level wiring
+src/core/                puzzle domain, no DOM and no engine
+  layout.ts              three-face surface graph, adjacency, square projection
+  math.ts                vectors and quaternions over plain tuples
+  view.ts                camera direction, pointer lean, visible-face check
+  rng.ts                 seeded randomness
+  palette.ts             hsl→hex and the generated level palette
+  curve.ts               grading curve and level configs
+  level.ts               seeded generation, solved state, validation
+  solver.ts              independent solvability checks
+  preview.ts             isometric projection: one quad per mini-cube tile
+src/render/              PlayCanvas presentation
+  scene.ts               engine bootstrap, isometric camera, lights
+  cube-renderer.ts       tiles, materials, lean, picking, glow
+  meshes.ts              rounded body/tile and stitch meshes
+  icon-atlas.ts          start/stop glyph atlas
+src/play/
+  level-session.ts       drag rules: extend, truncate, release, completion
+src/ui/
+  screens.ts             level grid (5×5 mini cubes), HUD, solved dock, toast
+  mini-cube.ts           level-screen mini cube canvas
+src/state/
+  progress.ts            localStorage save (seed + completed levels)
 ```
 
 ## Verification
@@ -125,7 +140,7 @@ src/progress.ts        localStorage save (seed + completed levels)
 - 125 generated levels (25 levels × 5 seeds): full coverage, adjacency along
   every path, endpoint pairs distinct and exposed alone in the start state, and
   deterministic regeneration from `(seed, index)`;
-- **solvability**, with the independent solver in `src/game/solver.ts` that only
+- **solvability**, with the independent solver in `src/core/solver.ts` that only
   sees the layout and the endpoint pairs: exact *covering* search (disjoint
   paths that leave no square grey) on boards up to 4×4, where the exponential
   search terminates, plus a BFS "each pair is connectable" necessary condition

@@ -1,5 +1,6 @@
 import { FACES, PLAY_FACES } from "./layout.ts";
-import type { Level } from "./levels.ts";
+import type { Level } from "./level.ts";
+import { cross, normalize } from "./math.ts";
 
 export type Point = { x: number; y: number };
 /** Screen-space corners of one preview tile, in order around the quad. */
@@ -9,15 +10,6 @@ export type Quad = readonly [Point, Point, Point, Point];
 const VIEW = normalize([1, 1, 1]);
 const RIGHT = normalize(cross([0, 1, 0], VIEW));
 const UP = cross(VIEW, RIGHT);
-
-function normalize(v: readonly [number, number, number]): [number, number, number] {
-  const length = Math.hypot(v[0], v[1], v[2]);
-  return [v[0] / length, v[1] / length, v[2] / length];
-}
-
-function cross(a: readonly [number, number, number], b: readonly [number, number, number]): [number, number, number] {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
 
 /** Orthographic projection; canvas y grows downwards. */
 function project(x: number, y: number, z: number): Point {

@@ -2,6 +2,7 @@
  *  pure function of (seed, level index), so a saved seed replays the same run. */
 
 const KEY = "cubpat.save.v1";
+const DEBUG_DEV_MODE_ON = true;
 
 export interface SaveData {
   seed: number;
@@ -45,6 +46,7 @@ export function recordCompletion(save: SaveData, levelIndex: number): void {
 }
 
 export function isUnlocked(save: SaveData, levelIndex: number): boolean {
+  if (DEBUG_DEV_MODE_ON) return true;
   if (levelIndex === 0) return true;
   return save.completed.includes(levelIndex) || save.completed.includes(levelIndex - 1);
 }

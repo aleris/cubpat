@@ -1,12 +1,16 @@
 import * as pc from "playcanvas";
+import { FACES, projectToSquare, type CubeLayout } from "../core/layout.ts";
+import type { Level } from "../core/level.ts";
+import { cross, dot, madd, type Vec3 } from "../core/math.ts";
+import { TILT_MAX, tiltQuat } from "../core/view.ts";
+import { drawIconAtlas } from "./icon-atlas.ts";
 import {
-  FACES,
-  TILT_MAX,
-  projectToSquare,
-  tiltQuat
-} from "./layout.ts";
-import type { CubeLayout } from "./layout.ts";
-import type { Level } from "./levels.ts";
+  pushHalfTorus,
+  pushQuad,
+  roundedCubeMesh,
+  roundedTileMesh,
+  type MeshData
+} from "./meshes.ts";
 
 /** Rotation (Euler, degrees) that turns a box's local +Z into each face normal. */
 const FACE_EULER: ReadonlyArray<readonly [number, number, number]> = [
@@ -20,14 +24,6 @@ const FACE_EULER: ReadonlyArray<readonly [number, number, number]> = [
 
 const TILE_INSET = 0.12;
 const TILE_THICKNESS = 0.03;
-/** Tile corner radius, as a fraction of the tile edge. */
-const TILE_CORNER = 0.22;
-/** Segments per rounded tile corner. */
-const TILE_CORNER_SEGMENTS = 6;
-/** Radius of the rounded top edge, as a fraction of the tile thickness. */
-const TILE_BEVEL = 0.55;
-/** Segments across the rounded top edge. */
-const TILE_BEVEL_SEGMENTS = 4;
 const TILE_OFFSET = 0.5 + 0.006;
 
 /**
@@ -37,8 +33,6 @@ const TILE_OFFSET = 0.5 + 0.006;
  * leaves a gap beneath a tile.
  */
 const BODY_BEVEL = 0.02;
-/** Segments across each quarter of the body bevel. */
-const BODY_BEVEL_SEGMENTS = 4;
 const PICK_HALF = 0.5 + TILE_THICKNESS;
 /** Time constant of the lean as it follows the pointer, in seconds. */
 const TILT_FOLLOW = 0.08;
@@ -82,301 +76,6 @@ const STITCH_RADIUS = 0.1;
 const STITCH_FOOT = 1 / 6;
 /** How deep a stitch end sinks into the tile, as a multiple of its radius. */
 const STITCH_SINK = 0.5;
-/** Segments along a stitch (the half torus). */
-const STITCH_ARC_SEGMENTS = 14;
-/** Segments around the stitch thread. */
-const STITCH_TUBE_SEGMENTS = 8;
-
-type Vec = [number, number, number];
-
-function cross(a: Vec, b: Vec): Vec {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
-
-function dot(a: Vec, b: Vec): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-/** a + b * k */
-function madd(a: Vec, b: Vec, k: number): Vec {
-  return [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
-}
-
-interface MeshData {
-  positions: number[];
-  normals: number[];
-  uvs: number[];
-  indices: number[];
-}
-
-/** Push a quad centred on c spanning ±hx along ax (texture u) and ±hy along ay. */
-function pushQuad(
-  m: MeshData, c: Vec, ax: Vec, ay: Vec, hx: number, hy: number, n: Vec,
-  u0: number, u1: number, v0: number, v1: number
-): void {
-  const base = m.positions.length / 3;
-  const corners: Array<[number, number, number, number]> = [
-    [-1, -1, u0, v0],
-    [1, -1, u1, v0],
-    [1, 1, u1, v1],
-    [-1, 1, u0, v1]
-  ];
-  for (const [sx, sy, u, v] of corners) {
-    m.positions.push(
-      c[0] + ax[0] * hx * sx + ay[0] * hy * sy,
-      c[1] + ax[1] * hx * sx + ay[1] * hy * sy,
-      c[2] + ax[2] * hx * sx + ay[2] * hy * sy
-    );
-    m.normals.push(n[0], n[1], n[2]);
-    m.uvs.push(u, v);
-  }
-  m.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-}
-
-/**
- * Tile slab, `size` square by `thickness` deep, centred on the origin: a
- * rounded rectangle whose top edge is rounded over by a quarter circle. Built
- * at its real size (not scaled from a unit mesh) so the bevel stays circular.
- * The outline runs counter-clockwise seen from +Z.
- */
-function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickness: number): pc.Mesh {
-  const corner = TILE_CORNER * size;
-  // insetting the outline by the bevel must leave a valid rounded rectangle
-  const bevel = Math.min(TILE_BEVEL * thickness, corner);
-  const c = size / 2 - corner;
-  const top = thickness / 2;
-  const outline: Array<[number, number, number, number]> = [];
-  const centres: ReadonlyArray<readonly [number, number]> = [[c, c], [-c, c], [-c, -c], [c, -c]];
-  centres.forEach(([cx, cy], k) => {
-    for (let s = 0; s <= TILE_CORNER_SEGMENTS; s++) {
-      const a = ((k + s / TILE_CORNER_SEGMENTS) * Math.PI) / 2;
-      const nx = Math.cos(a);
-      const ny = Math.sin(a);
-      outline.push([cx + nx * corner, cy + ny * corner, nx, ny]);
-    }
-  });
-  const count = outline.length;
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-
-  // Rings of the outline from the bottom edge up over the bevel: the bottom
-  // ring, then the bevel profile from vertical (start of the arc, which also
-  // tops the straight wall) to horizontal (edge of the top cap).
-  const ring = (inset: number, z: number, nh: number, nz: number): number => {
-    const base = positions.length / 3;
-    for (const [x, y, nx, ny] of outline) {
-      positions.push(x - nx * inset, y - ny * inset, z);
-      normals.push(nx * nh, ny * nh, nz);
-    }
-    return base;
-  };
-  const rings = [ring(0, -top, 1, 0)];
-  for (let s = 0; s <= TILE_BEVEL_SEGMENTS; s++) {
-    const t = ((s / TILE_BEVEL_SEGMENTS) * Math.PI) / 2;
-    rings.push(ring(bevel * (1 - Math.cos(t)), top - bevel + bevel * Math.sin(t), Math.cos(t), Math.sin(t)));
-  }
-  for (let r = 0; r + 1 < rings.length; r++) {
-    const lo = rings[r];
-    const hi = rings[r + 1];
-    for (let i = 0; i < count; i++) {
-      const j = (i + 1) % count;
-      indices.push(lo + i, lo + j, hi + j, lo + i, hi + j, hi + i);
-    }
-  }
-
-  // top cap: fan over the last ring, whose normals already point up
-  const topRing = rings[rings.length - 1];
-  const topCentre = positions.length / 3;
-  positions.push(0, 0, top);
-  normals.push(0, 0, 1);
-  for (let i = 0; i < count; i++) indices.push(topCentre, topRing + i, topRing + ((i + 1) % count));
-
-  // bottom cap: own vertices, facing down
-  const bottomRing = ring(0, -top, 0, -1);
-  const bottomCentre = positions.length / 3;
-  positions.push(0, 0, -top);
-  normals.push(0, 0, -1);
-  for (let i = 0; i < count; i++) indices.push(bottomCentre, bottomRing + ((i + 1) % count), bottomRing + i);
-
-  const mesh = new pc.Mesh(device);
-  mesh.setPositions(positions);
-  mesh.setNormals(normals);
-  mesh.setIndices(indices);
-  mesh.update(pc.PRIMITIVE_TRIANGLES);
-  return mesh;
-}
-
-/**
- * Cube body, `half` from the origin to each face with every edge and corner
- * rounded over by `radius`: flat face quads, quarter-cylinder edges and sphere
- * octant corners. Together they close the box exactly, and the normals are
- * analytic everywhere so the bevel reads as one smooth surface. Every triangle
- * is wound to face along its vertex normals.
- */
-function roundedCubeData(half: number, radius: number): MeshData {
-  const flat = half - radius;
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-
-  const vertex = (p: Vec, n: Vec): number => {
-    const index = positions.length / 3;
-    positions.push(p[0], p[1], p[2]);
-    normals.push(n[0], n[1], n[2]);
-    return index;
-  };
-
-  /** Triangle a-b-c, reversed when its winding fights the vertex normals. */
-  const tri = (a: number, b: number, c: number): void => {
-    const ax = positions[a * 3];
-    const ay = positions[a * 3 + 1];
-    const az = positions[a * 3 + 2];
-    const bx = positions[b * 3];
-    const by = positions[b * 3 + 1];
-    const bz = positions[b * 3 + 2];
-    const cx = positions[c * 3];
-    const cy = positions[c * 3 + 1];
-    const cz = positions[c * 3 + 2];
-    const gx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
-    const gy = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
-    const gz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-    const nx = normals[a * 3] + normals[b * 3] + normals[c * 3];
-    const ny = normals[a * 3 + 1] + normals[b * 3 + 1] + normals[c * 3 + 1];
-    const nz = normals[a * 3 + 2] + normals[b * 3 + 2] + normals[c * 3 + 2];
-    if (gx * nx + gy * ny + gz * nz < 0) indices.push(a, c, b);
-    else indices.push(a, b, c);
-  };
-  const quad = (a: number, b: number, c: number, d: number): void => {
-    tri(a, b, c);
-    tri(a, c, d);
-  };
-
-  // flat faces: the box plane inset by the bevel radius
-  for (let axis = 0; axis < 3; axis++) {
-    const u = (axis + 1) % 3;
-    const v = (axis + 2) % 3;
-    const n: Vec = [0, 0, 0];
-    for (const sign of [1, -1]) {
-      n[axis] = sign;
-      const corner = (su: number, sv: number): number => {
-        const p: Vec = [0, 0, 0];
-        p[axis] = sign * half;
-        p[u] = su * flat;
-        p[v] = sv * flat;
-        return vertex(p, n);
-      };
-      quad(corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1));
-    }
-  }
-
-  // edges: quarter cylinders between the two adjacent flat faces
-  for (let k = 0; k < 3; k++) {
-    const i = (k + 1) % 3;
-    const j = (k + 2) % 3;
-    for (const si of [1, -1]) {
-      for (const sj of [1, -1]) {
-        const ring = (depth: number): number[] => {
-          const ringIndices: number[] = [];
-          for (let s = 0; s <= BODY_BEVEL_SEGMENTS; s++) {
-            const t = ((s / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
-            const n: Vec = [0, 0, 0];
-            n[i] = si * Math.cos(t);
-            n[j] = sj * Math.sin(t);
-            const p: Vec = [0, 0, 0];
-            p[i] = si * flat + n[i] * radius;
-            p[j] = sj * flat + n[j] * radius;
-            p[k] = depth;
-            ringIndices.push(vertex(p, n));
-          }
-          return ringIndices;
-        };
-        const lo = ring(-flat);
-        const hi = ring(flat);
-        for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) quad(lo[s], lo[s + 1], hi[s + 1], hi[s]);
-      }
-    }
-  }
-
-  // corners: sphere octants, fanned from the point where they meet a face
-  for (const sx of [1, -1]) {
-    for (const sy of [1, -1]) {
-      for (const sz of [1, -1]) {
-        const centre: Vec = [sx * flat, sy * flat, sz * flat];
-        const pole = vertex([sx * half, sy * flat, sz * flat], [sx, 0, 0]);
-        let inner: number[] = [];
-        for (let r = 1; r <= BODY_BEVEL_SEGMENTS; r++) {
-          const a = ((r / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
-          const ring: number[] = [];
-          for (let s = 0; s <= BODY_BEVEL_SEGMENTS; s++) {
-            const b = ((s / BODY_BEVEL_SEGMENTS) * Math.PI) / 2;
-            const n: Vec = [
-              sx * Math.cos(a),
-              sy * Math.sin(a) * Math.cos(b),
-              sz * Math.sin(a) * Math.sin(b)
-            ];
-            ring.push(vertex(madd(centre, n, radius), n));
-          }
-          if (r === 1) {
-            for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) tri(pole, ring[s], ring[s + 1]);
-          } else {
-            for (let s = 0; s < BODY_BEVEL_SEGMENTS; s++) quad(inner[s], inner[s + 1], ring[s + 1], ring[s]);
-          }
-          inner = ring;
-        }
-      }
-    }
-  }
-
-  return { positions, normals, uvs: [], indices };
-}
-
-function roundedCubeMesh(device: pc.GraphicsDevice, half: number, radius: number): pc.Mesh {
-  const data = roundedCubeData(half, radius);
-  const mesh = new pc.Mesh(device);
-  mesh.setPositions(data.positions);
-  mesh.setNormals(data.normals);
-  mesh.setIndices(data.indices);
-  mesh.update(pc.PRIMITIVE_TRIANGLES);
-  return mesh;
-}
-
-/** Atlas: left cell = start (play triangle), right cell = stop (rounded square). */
-function drawIconAtlas(): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 128;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, 256, 128);
-  for (const cx of [64, 192]) {
-    ctx.fillStyle = "rgba(12,14,24,0.8)";
-    ctx.beginPath();
-    ctx.arc(cx, 64, 58, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineJoin = "round";
-  ctx.lineWidth = 8;
-  // play triangle, ~58px tall overall (incl. rounded stroke), optically centred
-  const h = 50;
-  const w = h * 0.87;
-  const ox = 64 + 5 - w / 2;
-  ctx.beginPath();
-  ctx.moveTo(ox, 64 - h / 2);
-  ctx.lineTo(ox + w, 64);
-  ctx.lineTo(ox, 64 + h / 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // rounded square, ~46px
-  const q = 38;
-  ctx.beginPath();
-  ctx.rect(192 - q / 2, 64 - q / 2, q, q);
-  ctx.fill();
-  ctx.stroke();
-  return canvas;
-}
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -430,7 +129,7 @@ export class CubeRenderer {
   private readonly tiltTarget = new pc.Quat();
   private readonly tiltTmp = new pc.Quat();
   private readonly tiltUpright = new pc.Quat();
-  private readonly focusPoint: Vec = [0, 0, 0];
+  private readonly focusPoint: Vec3 = [0, 0, 0];
 
   private glow: GlowState | null = null;
   private readonly tileGlow: Float32Array;
@@ -598,7 +297,7 @@ export class CubeRenderer {
   // path markers: start/stop icons and a stitch loop between each pair
   // -------------------------------------------------------------------------
 
-  private centreOf(square: number): Vec {
+  private centreOf(square: number): Vec3 {
     const c = this.layout.center;
     return [c[square * 3], c[square * 3 + 1], c[square * 3 + 2]];
   }
@@ -614,7 +313,7 @@ export class CubeRenderer {
     // "play" on every face. Canvas rows run downwards, hence v from 1 at the
     // bottom edge to 0 at the top.
     const right = this.camera.right;
-    const camR: Vec = [right.x, right.y, right.z];
+    const camR: Vec3 = [right.x, right.y, right.z];
 
     for (let c = 0; c < this.paths.length; c++) {
       const path = this.paths[c];
@@ -625,9 +324,9 @@ export class CubeRenderer {
 
       for (const [square, u0] of [[start, 0], [stop, 0.5]] as const) {
         const basis = FACES[this.layout.face[square]];
-        const n = basis.n as Vec;
-        let ax = basis.u as Vec;
-        for (const axis of [basis.u, basis.v] as Vec[]) {
+        const n = basis.n as Vec3;
+        let ax = basis.u as Vec3;
+        for (const axis of [basis.u, basis.v] as Vec3[]) {
           for (const sign of [1, -1]) {
             const k = dot(axis, camR) * sign;
             if (k > dot(ax, camR)) ax = [axis[0] * sign, axis[1] * sign, axis[2] * sign];
@@ -660,8 +359,8 @@ export class CubeRenderer {
   private pushStitch(m: MeshData, a: number, b: number, s: number): void {
     const fa = this.layout.face[a];
     const fb = this.layout.face[b];
-    const nA = FACES[fa].n as Vec;
-    const nB = FACES[fb].n as Vec;
+    const nA = FACES[fa].n;
+    const nB = FACES[fb].n;
     const A = this.centreOf(a);
     const B = this.centreOf(b);
     const width = s * (1 - TILE_INSET);
@@ -671,13 +370,13 @@ export class CubeRenderer {
     const reach = width * (0.5 - STITCH_FOOT);
     const lift = TILE_TOP - STITCH_SINK * radius;
 
-    let pA: Vec;
-    let pB: Vec;
-    let bulge: Vec;
+    let pA: Vec3;
+    let pB: Vec3;
+    let bulge: Vec3;
     if (fa === fb) {
       const d = madd(B, A, -1);
       const len = Math.hypot(d[0], d[1], d[2]);
-      const along: Vec = [d[0] / len, d[1] / len, d[2] / len];
+      const along: Vec3 = [d[0] / len, d[1] / len, d[2] / len];
       pA = madd(madd(A, along, reach), nA, lift);
       pB = madd(madd(B, along, -reach), nA, lift);
       bulge = nA;
@@ -688,53 +387,7 @@ export class CubeRenderer {
       pB = madd(madd(B, nA, reach), nB, lift);
       bulge = [nA[0] + nB[0], nA[1] + nB[1], nA[2] + nB[2]];
     }
-    this.pushHalfTorus(m, pA, pB, bulge, radius);
-  }
-
-  /**
-   * Half a torus: the semicircular arc from `pA` to `pB` that rises along
-   * `bulge`, swept as a tube of `radius`. The ends are open but buried in the
-   * tiles, and the winding matches the outward tube normals.
-   */
-  private pushHalfTorus(m: MeshData, pA: Vec, pB: Vec, bulge: Vec, radius: number): void {
-    const chord = madd(pB, pA, -1);
-    const len = Math.hypot(chord[0], chord[1], chord[2]);
-    if (len < 1e-6) return;
-    const e1: Vec = [chord[0] / len, chord[1] / len, chord[2] / len];
-    const rise = madd(bulge, e1, -dot(bulge, e1));
-    const riseLen = Math.hypot(rise[0], rise[1], rise[2]);
-    if (riseLen < 1e-6) return;
-    const e2: Vec = [rise[0] / riseLen, rise[1] / riseLen, rise[2] / riseLen];
-    const axis = cross(e1, e2);
-    const centre = madd(pA, chord, 0.5);
-    const major = len / 2;
-
-    const base = m.positions.length / 3;
-    for (let i = 0; i <= STITCH_ARC_SEGMENTS; i++) {
-      const theta = (i / STITCH_ARC_SEGMENTS) * Math.PI;
-      const ct = Math.cos(theta);
-      const st = Math.sin(theta);
-      const radial: Vec = [e1[0] * ct + e2[0] * st, e1[1] * ct + e2[1] * st, e1[2] * ct + e2[2] * st];
-      const ring = madd(centre, radial, major);
-      for (let j = 0; j <= STITCH_TUBE_SEGMENTS; j++) {
-        const phi = (j / STITCH_TUBE_SEGMENTS) * Math.PI * 2;
-        const cp = Math.cos(phi);
-        const sp = Math.sin(phi);
-        const nx = radial[0] * cp + axis[0] * sp;
-        const ny = radial[1] * cp + axis[1] * sp;
-        const nz = radial[2] * cp + axis[2] * sp;
-        m.positions.push(ring[0] + nx * radius, ring[1] + ny * radius, ring[2] + nz * radius);
-        m.normals.push(nx, ny, nz);
-        m.uvs.push(0, 0);
-      }
-    }
-    for (let i = 0; i < STITCH_ARC_SEGMENTS; i++) {
-      for (let j = 0; j < STITCH_TUBE_SEGMENTS; j++) {
-        const lo = base + i * (STITCH_TUBE_SEGMENTS + 1) + j;
-        const hi = lo + STITCH_TUBE_SEGMENTS + 1;
-        m.indices.push(lo, hi, hi + 1, lo, hi + 1, lo + 1);
-      }
-    }
+    pushHalfTorus(m, pA, pB, bulge, radius);
   }
 
   /** One lit 3D mesh per colour: the stitches share the tile's own material. */
@@ -889,7 +542,7 @@ export class CubeRenderer {
       if (t2 < tmax) tmax = t2;
     }
     if (beside || tmin < 0 || tmin > tmax) return false;
-    out.copy(dir).scale(tmin).add(origin);
+    out.copy(dir).mulScalar(tmin).add(origin);
     return true;
   }
 
@@ -917,7 +570,7 @@ export class CubeRenderer {
         hi = mid;
       }
     }
-    out.copy(dir).scale((lo + hi) * 0.5).add(origin);
+    out.copy(dir).mulScalar((lo + hi) * 0.5).add(origin);
     const miss = Math.hypot(
       out.x - clampHalf(out.x),
       out.y - clampHalf(out.y),
