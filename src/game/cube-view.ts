@@ -40,7 +40,8 @@ const BODY_BEVEL = 0.02;
 /** Segments across each quarter of the body bevel. */
 const BODY_BEVEL_SEGMENTS = 4;
 const PICK_HALF = 0.5 + TILE_THICKNESS;
-const TILT_DURATION = 0.24;
+/** Time constant of the lean as it follows the pointer, in seconds. */
+const TILT_FOLLOW = 0.08;
 
 const GLOW_RISE = 0.08;
 const GLOW_SETTLE = 0.3;
@@ -403,11 +404,10 @@ export class CubeRenderer {
   private head = -1;
   private time = 0;
 
-  private readonly tiltFrom = new pc.Quat();
+  /** Lean the cube follows: the surface under the pointer, turned to the camera. */
   private readonly tiltTarget = new pc.Quat();
   private readonly tiltTmp = new pc.Quat();
-  private tiltT = 1;
-  private tilting = false;
+  private readonly focusPoint: Vec = [0, 0, 0];
 
   private glow: GlowState | null = null;
   private readonly tileGlow: Float32Array;
@@ -416,6 +416,7 @@ export class CubeRenderer {
   private readonly tmpB = new pc.Vec3();
   private readonly tmpC = new pc.Vec3();
   private readonly tmpD = new pc.Vec3();
+  private readonly tmpE = new pc.Vec3();
   private readonly tmpMat = new pc.Mat4();
 
   constructor(app: pc.AppBase, camera: pc.Entity, level: Level) {
@@ -557,7 +558,6 @@ export class CubeRenderer {
     if (this.head === index) return;
     this.head = index;
     this.applyMaterials();
-    this.tiltTo(index >= 0 ? index : null);
   }
 
   private applyMaterials(): void {
@@ -698,79 +698,80 @@ export class CubeRenderer {
   }
 
   // -------------------------------------------------------------------------
-  // orientation
+  // orientation: the cube leans towards the pointer
   // -------------------------------------------------------------------------
 
   /**
-   * Lean the cube a little so the active square faces the camera centre. The
-   * three visible faces never change: the lean is capped at TILT_MAX, far below
-   * the ~35 degrees that would bring another face into view.
+   * Follow the pointer. The cube leans the spot under the pointer towards the
+   * camera, so that spot's square is the most frontal part of the view and the
+   * squares around it slide towards the pointer. Leaning is continuous: every
+   * pointer move re-aims it, whether or not the square under the pointer
+   * changes, which is what makes crossing to a neighbour cost less travel.
    */
-  tiltTo(square: number | null): void {
-    const target = this.tiltTarget;
-    if (square === null || square < 0) {
-      target.set(0, 0, 0, 1);
-    } else {
-      const q = tiltQuat([
-        this.layout.center[square * 3],
-        this.layout.center[square * 3 + 1],
-        this.layout.center[square * 3 + 2]
-      ], TILT_MAX);
-      target.set(q[0], q[1], q[2], q[3]);
-    }
-
-    const current = this.root.getLocalRotation();
-    const dot =
-      current.x * target.x + current.y * target.y + current.z * target.z + current.w * target.w;
-    if (dot < 0) target.set(-target.x, -target.y, -target.z, -target.w);
-    if (Math.abs(dot) > 0.9999) {
-      this.root.setLocalRotation(target);
-      this.tiltFrom.copy(target);
-      this.tiltT = 1;
-      this.tilting = false;
+  setCursor(clientX: number, clientY: number): void {
+    // Rest frame: the root only rotates about the origin, so world space is
+    // also the untransformed cube space. Deliberately not the leaned frame:
+    // the aim must be a function of the pointer alone or it feeds back on itself.
+    if (!this.screenRay(clientX, clientY) || !this.hitCube(this.tmpA, this.tmpB, this.tmpC)) {
+      this.clearCursor();
       return;
     }
+    this.focusPoint[0] = this.tmpC.x;
+    this.focusPoint[1] = this.tmpC.y;
+    this.focusPoint[2] = this.tmpC.z;
+    const q = tiltQuat(this.focusPoint, TILT_MAX);
+    this.tiltTarget.set(q[0], q[1], q[2], q[3]);
+  }
 
-    this.tiltFrom.copy(current);
-    this.tiltT = 0;
-    this.tilting = true;
+  /** Rest the cube upright (pointer off the cube, or a touch lifted). */
+  clearCursor(): void {
+    this.tiltTarget.set(0, 0, 0, 1);
   }
 
   private updateTilt(dt: number): void {
-    if (!this.tilting) return;
-    this.tiltT = Math.min(1, this.tiltT + dt / TILT_DURATION);
-    const t = easeInOutCubic(this.tiltT);
-    this.tiltTmp.slerp(this.tiltFrom, this.tiltTarget, t);
+    const target = this.tiltTarget;
+    const current = this.root.getLocalRotation();
+    const dot = Math.abs(
+      current.x * target.x + current.y * target.y + current.z * target.z + current.w * target.w
+    );
+    // Settled to within ~1e-3 degrees: stop touching the entity.
+    if (dot > 0.999999999) return;
+    this.tiltTmp.slerp(current, target, 1 - Math.exp(-dt / TILT_FOLLOW));
     this.root.setLocalRotation(this.tiltTmp);
-    if (this.tiltT >= 1) this.tilting = false;
   }
 
   // -------------------------------------------------------------------------
   // picking
   // -------------------------------------------------------------------------
 
-  pick(clientX: number, clientY: number): number | null {
+  /**
+   * World-space ray through a client point: `tmpA` becomes the near clip point
+   * and `tmpB` the unit direction. False when the canvas has no area.
+   */
+  private screenRay(clientX: number, clientY: number): boolean {
     const rect = this.canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return null;
+    if (rect.width <= 0 || rect.height <= 0) return false;
     const px = ((clientX - rect.left) / rect.width) * this.canvas.width;
     const py = ((clientY - rect.top) / rect.height) * this.canvas.height;
     const cam = this.camera.camera!;
     cam.screenToWorld(px, py, cam.nearClip, this.tmpA);
     cam.screenToWorld(px, py, cam.farClip, this.tmpB);
+    this.tmpB.sub(this.tmpA).normalize();
+    return true;
+  }
 
-    this.tmpMat.copy(this.root.getWorldTransform()).invert();
-    const origin = this.tmpMat.transformPoint(this.tmpA, this.tmpC);
-    const dir = this.tmpD.copy(this.tmpB).sub(this.tmpA);
-    this.tmpMat.transformVector(dir, dir);
-    dir.normalize();
-
+  /**
+   * Entry point of a ray into the pick cube, in whatever frame the ray is
+   * already expressed in. Writes the hit to `out`.
+   */
+  private hitCube(origin: pc.Vec3, dir: pc.Vec3, out: pc.Vec3): boolean {
     let tmin = -Infinity;
     let tmax = Infinity;
     for (let axis = 0; axis < 3; axis++) {
       const o = axis === 0 ? origin.x : axis === 1 ? origin.y : origin.z;
       const d = axis === 0 ? dir.x : axis === 1 ? dir.y : dir.z;
       if (Math.abs(d) < 1e-9) {
-        if (Math.abs(o) > PICK_HALF) return null;
+        if (Math.abs(o) > PICK_HALF) return false;
         continue;
       }
       let t1 = (-PICK_HALF - o) / d;
@@ -782,14 +783,20 @@ export class CubeRenderer {
       }
       if (t1 > tmin) tmin = t1;
       if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) return null;
+      if (tmin > tmax) return false;
     }
-    if (tmin < 0 || tmax < 0) return null;
+    if (tmin < 0 || tmax < 0) return false;
+    out.copy(dir).scale(tmin).add(origin);
+    return true;
+  }
 
-    const hitX = origin.x + dir.x * tmin;
-    const hitY = origin.y + dir.y * tmin;
-    const hitZ = origin.z + dir.z * tmin;
-    return projectToSquare(this.layout.size, hitX, hitY, hitZ);
+  pick(clientX: number, clientY: number): number | null {
+    if (!this.screenRay(clientX, clientY)) return null;
+    this.tmpMat.copy(this.root.getWorldTransform()).invert();
+    const origin = this.tmpMat.transformPoint(this.tmpA, this.tmpC);
+    const dir = this.tmpMat.transformVector(this.tmpB, this.tmpD).normalize();
+    if (!this.hitCube(origin, dir, this.tmpE)) return null;
+    return projectToSquare(this.layout.size, this.tmpE.x, this.tmpE.y, this.tmpE.z);
   }
 
   // -------------------------------------------------------------------------

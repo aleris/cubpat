@@ -10,6 +10,7 @@ import {
   FACES,
   PLAY_FACES,
   TILT_MAX,
+  VIEW_DIR,
   buildLayout,
   neighborCount,
   projectToSquare,
@@ -122,6 +123,37 @@ for (const size of [2, 6]) {
 }
 check(worstTilt <= TILT_MAX + 1e-6, `tilt of ${((worstTilt * 180) / Math.PI).toFixed(1)}deg exceeds the cap`);
 console.log(`lean: capped at ${((worstTilt * 180) / Math.PI).toFixed(1)}deg, always three faces`);
+
+// The lean follows the pointer, so it aims from anywhere on the three faces,
+// not just square centres: rims and corners included. A point is never allowed
+// to turn another face towards the camera.
+let rimTilt = 0;
+for (const face of PLAY) {
+  const basis = FACES[face];
+  for (let i = 0; i <= 20; i++) {
+    for (let j = 0; j <= 20; j++) {
+      const uc = -0.5 + i / 20;
+      const vc = -0.5 + j / 20;
+      const point = [0, 1, 2].map((k) => basis.n[k] * 0.5 + basis.u[k] * uc + basis.v[k] * vc);
+      const quat = tiltQuat(point);
+      check(visibleFaceCount(quat) === 3, `lean at ${point} shows ${visibleFaceCount(quat)} faces`);
+      rimTilt = Math.max(rimTilt, 2 * Math.acos(Math.min(1, Math.abs(quat[3]))));
+    }
+  }
+}
+check(rimTilt <= TILT_MAX + 1e-6, `rim lean of ${((rimTilt * 180) / Math.PI).toFixed(1)}deg exceeds the cap`);
+
+// Leaning is what pulls the next square under the pointer: the aimed point
+// must end up closer to the camera axis than it started, never further.
+for (const face of PLAY) {
+  const basis = FACES[face];
+  const point = [0, 1, 2].map((k) => basis.n[k] * 0.5 + basis.u[k] * 0.35 + basis.v[k] * 0.35);
+  const aimed = quatRotate(tiltQuat(point), point);
+  const before = point.reduce((sum, value, k) => sum + value * VIEW_DIR[k], 0) / Math.hypot(...point);
+  const after = aimed.reduce((sum, value, k) => sum + value * VIEW_DIR[k], 0) / Math.hypot(...aimed);
+  check(after > before, `lean at ${point} turns away from the camera`);
+}
+console.log(`pointer lean: aimed from all ${PLAY.length} face rims, capped at ${((rimTilt * 180) / Math.PI).toFixed(1)}deg`);
 
 // --- grading curve ---------------------------------------------------------
 const sizes = LEVEL_CONFIGS.map((config) => config.size);

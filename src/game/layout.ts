@@ -216,9 +216,14 @@ export const VIEW_DIR: Vec3 = (() => {
   return [k, k, k];
 })();
 
-/** How far the cube leans towards the active square, in radians. Kept small:
- *  it is a "rotate a bit", never a face swap. */
-export const TILT_MAX = (13 * Math.PI) / 180;
+/**
+ * How far the cube leans towards the point under the pointer, in radians.
+ * This is the whole cursor affordance: leaning the touched part of the surface
+ * towards the camera slides the surrounding squares under the pointer, so a
+ * square is reached with less pointer travel. The cap keeps the three play
+ * faces facing the camera (another face needs a rotation past ~35 degrees).
+ */
+export const TILT_MAX = (18 * Math.PI) / 180;
 
 const clamp = (value: number, min: number, max: number): number =>
   value < min ? min : value > max ? max : value;

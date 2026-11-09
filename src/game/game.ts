@@ -45,6 +45,11 @@ export class LevelSession {
   private readonly onPointerDown = (e: PointerEvent): void => this.pointerDown(e);
   private readonly onPointerMove = (e: PointerEvent): void => this.pointerMove(e);
   private readonly onPointerUp = (e: PointerEvent): void => this.pointerUp(e);
+  private readonly onPointerCancel = (e: PointerEvent): void => {
+    this.pointerUp(e);
+    this.renderer.clearCursor();
+  };
+  private readonly onPointerLeave = (): void => this.renderer.clearCursor();
   private readonly onUpdate = (dt: number): void => this.renderer.update(dt);
 
   constructor(app: pc.AppBase, camera: pc.Entity, canvas: HTMLCanvasElement, level: Level, callbacks: SessionCallbacks) {
@@ -61,7 +66,8 @@ export class LevelSession {
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerup", this.onPointerUp);
-    canvas.addEventListener("pointercancel", this.onPointerUp);
+    canvas.addEventListener("pointercancel", this.onPointerCancel);
+    canvas.addEventListener("pointerleave", this.onPointerLeave);
     app.on("update", this.onUpdate);
     canvas.style.cursor = "default";
   }
@@ -72,7 +78,8 @@ export class LevelSession {
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
-    this.canvas.removeEventListener("pointercancel", this.onPointerUp);
+    this.canvas.removeEventListener("pointercancel", this.onPointerCancel);
+    this.canvas.removeEventListener("pointerleave", this.onPointerLeave);
     this.app.off("update", this.onUpdate);
     this.renderer.destroy();
   }
@@ -87,6 +94,7 @@ export class LevelSession {
     this.renderer.stopGlow();
     this.renderer.setHead(-1);
     this.renderer.setHover(-1);
+    this.renderer.clearCursor();
     this.renderer.setBoard(this.owners, this.paths);
   }
 
@@ -98,6 +106,7 @@ export class LevelSession {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
     this.canvas.setPointerCapture(e.pointerId);
+    this.renderer.setCursor(e.clientX, e.clientY);
 
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) return;
@@ -112,6 +121,9 @@ export class LevelSession {
   }
 
   private pointerMove(e: PointerEvent): void {
+    // The lean follows every move, not just the square changes: that is what
+    // slides the next square under the pointer.
+    this.renderer.setCursor(e.clientX, e.clientY);
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
       this.renderer.setHover(-1);
@@ -132,6 +144,9 @@ export class LevelSession {
     const drag = this.drag;
     this.drag = null;
     this.renderer.setHead(-1);
+    // A touch has no hover: drop the lean with the finger. A mouse keeps
+    // leaning while it stays over the cube.
+    if (e.pointerType !== "mouse") this.renderer.clearCursor();
     // Releasing short of the pair's second square keeps the path as drawn: the
     // player can pick it up again from any of its squares.
     if (drag && drag.reached) this.completeColor(drag.color);

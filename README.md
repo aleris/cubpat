@@ -24,10 +24,14 @@ npm test           # level generator invariants (no browser needed)
   so a path can cross faces.
 - **Three faces only.** The camera sits on the `(1,1,1)` diagonal, so exactly
   three faces face it; those three are the whole play field and the other three
-  are never shown or clickable. Touching a square leans the cube a few degrees
-  towards it (the "current square faces the camera centre" cue) and settles back
-  when the drag ends. The lean is capped well below the angle that would bring
-  another face into view, so the visible three never change.
+  are never shown or clickable. The cube leans towards whatever the pointer is
+  over, up to 18 degrees, continuously on every pointer move rather than only
+  when the square under it changes: the touched square becomes the most frontal
+  part of the view and the squares around it slide towards the pointer, so
+  reaching a neighbour costs roughly half the pointer travel. The lean settles
+  back when the pointer leaves the cube, and swings back upright with a touch.
+  The cap stays well below the ~35 degrees that would bring another face into
+  view, so the visible three never change.
 - **Path markers.** While a colour has a path (being dragged or linked), the
   square it was started from shows a ▶ icon, its pair shows a ■ icon, and a
   dashed line runs through the centres of the path's squares, folding over cube
@@ -106,7 +110,10 @@ src/progress.ts        localStorage save (seed + completed levels)
 
 - the play field for sizes 2–6: `3·n²` squares, corner/border/interior degrees,
   connected, hidden faces unpickable;
-- the lean keeps exactly the three play faces visible and never exceeds its cap;
+- the lean keeps exactly the three play faces visible and never exceeds its cap,
+  aimed from every square centre and from the whole rim of the three faces
+  (the pointer can now lean the cube from anywhere on its surface), and always
+  turns the aimed point towards the camera;
 - the grading curve;
 - 125 generated levels (25 levels × 5 seeds): full coverage, adjacency along
   every path, endpoint pairs distinct and exposed alone in the start state, and
