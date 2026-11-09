@@ -76,6 +76,7 @@ export function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickne
   const count = outline.length;
   const positions: number[] = [];
   const normals: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
 
   // Rings of the outline from the bottom edge up over the bevel: the bottom
@@ -84,8 +85,13 @@ export function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickne
   const ring = (inset: number, z: number, nh: number, nz: number): number => {
     const base = positions.length / 3;
     for (const [x, y, nx, ny] of outline) {
-      positions.push(x - nx * inset, y - ny * inset, z);
+      const px = x - nx * inset;
+      const py = y - ny * inset;
+      positions.push(px, py, z);
       normals.push(nx * nh, ny * nh, nz);
+      // Planar map over the tile: the top cap samples the pattern once, and the
+      // bevel and walls continue the same projection.
+      uvs.push(px / size + 0.5, py / size + 0.5);
     }
     return base;
   };
@@ -108,6 +114,7 @@ export function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickne
   const topCentre = positions.length / 3;
   positions.push(0, 0, top);
   normals.push(0, 0, 1);
+  uvs.push(0.5, 0.5);
   for (let i = 0; i < count; i++) indices.push(topCentre, topRing + i, topRing + ((i + 1) % count));
 
   // bottom cap: own vertices, facing down
@@ -115,11 +122,13 @@ export function roundedTileMesh(device: pc.GraphicsDevice, size: number, thickne
   const bottomCentre = positions.length / 3;
   positions.push(0, 0, -top);
   normals.push(0, 0, -1);
+  uvs.push(0.5, 0.5);
   for (let i = 0; i < count; i++) indices.push(bottomCentre, bottomRing + ((i + 1) % count), bottomRing + i);
 
   const mesh = new pc.Mesh(device);
   mesh.setPositions(positions);
   mesh.setNormals(normals);
+  mesh.setUvs(0, uvs);
   mesh.setIndices(indices);
   mesh.update(pc.PRIMITIVE_TRIANGLES);
   return mesh;
@@ -293,7 +302,7 @@ export function pushHalfTorus(m: MeshData, pA: Vec3, pB: Vec3, bulge: Vec3, radi
       const nz = radial[2] * cp + axis[2] * sp;
       m.positions.push(ring[0] + nx * radius, ring[1] + ny * radius, ring[2] + nz * radius);
       m.normals.push(nx, ny, nz);
-      m.uvs.push(0, 0);
+      m.uvs.push(i / STITCH_ARC_SEGMENTS, j / STITCH_TUBE_SEGMENTS);
     }
   }
   for (let i = 0; i < STITCH_ARC_SEGMENTS; i++) {

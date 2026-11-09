@@ -4,6 +4,7 @@ import type { Level } from "../core/level.ts";
 import { cross, dot, madd, type Vec3 } from "../core/math.ts";
 import { TILT_MAX, tiltQuat } from "../core/view.ts";
 import { drawIconAtlas } from "./icon-atlas.ts";
+import { drawTilePattern, TILE_PATTERN_SIZE } from "./tile-patterns.ts";
 import {
   pushHalfTorus,
   pushQuad,
@@ -118,6 +119,7 @@ export class CubeRenderer {
   private readonly stitchMeshes: pc.Mesh[] = [];
   private readonly iconMaterial: pc.StandardMaterial;
   private readonly iconTexture: pc.Texture;
+  private readonly patternTextures: pc.Texture[] = [];
 
   private owners: Int8Array;
   private paths: readonly number[][] = [];
@@ -145,6 +147,7 @@ export class CubeRenderer {
     this.camera = camera;
     this.level = level;
     this.layout = level.layout;
+    this.device = app.graphicsDevice;
     this.canvas = app.graphicsDevice.canvas as HTMLCanvasElement;
     this.owners = new Int8Array(level.layout.count).fill(-1);
     this.owners.set(level.initial);
@@ -154,8 +157,10 @@ export class CubeRenderer {
     this.emptyHoverMaterial = this.makeMaterial("#525a72", "#12151f", 0);
     for (let i = 0; i < level.palette.length; i++) {
       const hex = level.palette[i];
-      this.colorMaterials.push(this.makeMaterial(hex, hex, 0.07));
-      this.hoverMaterials.push(this.makeMaterial(hex, "#ffffff", 0.2, true));
+      const pattern = this.makePatternTexture(i);
+      this.patternTextures.push(pattern);
+      this.colorMaterials.push(this.makeMaterial(hex, hex, 0.07, false, pattern));
+      this.hoverMaterials.push(this.makeMaterial(hex, "#ffffff", 0.2, true, pattern));
     }
 
     this.stage = new pc.Entity("cube-stage");
@@ -167,7 +172,6 @@ export class CubeRenderer {
     // The body is the visible surface beneath the squares: one closed box with
     // bevelled edges and corners, so the faces meet without a seam and the
     // silhouette catches a highlight instead of a razor edge.
-    this.device = app.graphicsDevice;
     this.bodyMaterial = this.makeMaterial("#1c2130", "#1c2130", 0.04);
     const body = new pc.Entity("cube-body");
     body.addComponent("render");
@@ -219,7 +223,13 @@ export class CubeRenderer {
   // construction helpers
   // -------------------------------------------------------------------------
 
-  private makeMaterial(hex: string, emissiveHex: string, emissiveScale: number, lighten = false): pc.StandardMaterial {
+  private makeMaterial(
+    hex: string,
+    emissiveHex: string,
+    emissiveScale: number,
+    lighten = false,
+    map?: pc.Texture
+  ): pc.StandardMaterial {
     const mat = new pc.StandardMaterial();
     const diffuse = new pc.Color().fromString(hex);
     if (lighten) diffuse.lerp(diffuse, new pc.Color(1, 1, 1), 0.13);
@@ -233,8 +243,25 @@ export class CubeRenderer {
     mat.specular = new pc.Color(0.16, 0.16, 0.18);
     mat.useMetalness = false;
     mat.gloss = 0.55;
+    if (map) mat.diffuseMap = map;
     mat.update();
     return mat;
+  }
+
+  private makePatternTexture(index: number): pc.Texture {
+    const texture = new pc.Texture(this.device, {
+      width: TILE_PATTERN_SIZE,
+      height: TILE_PATTERN_SIZE,
+      format: pc.PIXELFORMAT_RGBA8,
+      mipmaps: true,
+      minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR,
+      magFilter: pc.FILTER_LINEAR,
+      addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+      addressV: pc.ADDRESS_CLAMP_TO_EDGE,
+      anisotropy: 8
+    });
+    texture.setSource(drawTilePattern(index));
+    return texture;
   }
 
   private createTile(index: number): void {
@@ -732,5 +759,6 @@ export class CubeRenderer {
     this.bodyMaterial.destroy();
     this.iconMaterial.destroy();
     this.iconTexture.destroy();
+    for (const texture of this.patternTextures) texture.destroy();
   }
 }

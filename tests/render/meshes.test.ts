@@ -45,6 +45,17 @@ describe("pushHalfTorus", () => {
     expect(m.uvs).toHaveLength(vertices * 2);
     expect(m.indices).toHaveLength(14 * 8 * 6);
 
+    // u runs along the arc, v around the tube, both spanning 0..1.
+    expect(m.uvs.slice(0, 2)).toEqual([0, 0]);
+    expect(m.uvs.slice(-2)).toEqual([1, 1]);
+    const middle = (7 * 9 + 4) * 2;
+    expect(m.uvs[middle]).toBeCloseTo(0.5, 9);
+    expect(m.uvs[middle + 1]).toBeCloseTo(0.5, 9);
+    for (const value of m.uvs) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+
     const centre = [0.5, 0, 0];
     const major = 0.5;
     for (let i = 0; i < vertices; i++) {
