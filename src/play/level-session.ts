@@ -132,10 +132,8 @@ export class LevelSession {
       for (const square of path) this.owners[square] = color;
       this.refreshComplete(color);
     }
-    this.solved = this.isSolved();
     this.renderer.setHead(-1);
     this.renderer.setBoard(this.owners, this.paths);
-    if (this.solved) this.callbacks.onSolved();
   }
 
   // -------------------------------------------------------------------------
@@ -438,18 +436,29 @@ export class LevelSession {
     const [a, b] = this.level.endpoints[color];
     const far = path.length > 0 && path[0] === a ? b : a;
     this.complete[color] = path.length >= 2 && path[path.length - 1] === far;
-    this.solved = this.isSolved();
+    this.updateSolved();
+  }
+
+  /**
+   * Report the solve the moment the board is complete. The completion glow is
+   * decoration: it can be cut short by another press, a reset or leaving the
+   * level, so nothing may depend on it finishing.
+   */
+  private updateSolved(): void {
+    if (!this.isSolved()) {
+      this.solved = false;
+      return;
+    }
+    if (this.solved) return;
+    this.solved = true;
+    this.callbacks.onSolved();
   }
 
   private completeColor(color: number): void {
     this.refreshComplete(color);
     this.renderer.setBoard(this.owners, this.paths);
     if (!this.solved && this.isFullyLinked()) this.callbacks.onAllLinked();
-    this.renderer.playPathGlow(color, this.paths[color].slice(), () => {
-      if (this.disposed || this.drag) return;
-      this.solved = this.isSolved();
-      if (this.solved) this.callbacks.onSolved();
-    });
+    this.renderer.playPathGlow(color, this.paths[color].slice());
   }
 
   /** Every pair linked and every square coloured. */

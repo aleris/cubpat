@@ -93,7 +93,6 @@ interface GlowState {
   step: number;
   holdStart: number;
   time: number;
-  onDone: (() => void) | null;
 }
 
 export class CubeRenderer {
@@ -714,12 +713,9 @@ export class CubeRenderer {
   // completion glow: the path's squares light up one by one
   // -------------------------------------------------------------------------
 
-  playPathGlow(color: number, path: number[], onDone?: () => void): void {
+  playPathGlow(color: number, path: number[]): void {
     this.clearGlow();
-    if (path.length === 0) {
-      onDone?.();
-      return;
-    }
+    if (path.length === 0) return;
     const hex = this.level.palette[color % this.level.palette.length];
     const overlays: pc.Entity[] = [];
     const materials: pc.StandardMaterial[] = [];
@@ -751,8 +747,7 @@ export class CubeRenderer {
       materials,
       step,
       holdStart: (path.length - 1) * step + GLOW_HOLD,
-      time: 0,
-      onDone: onDone ?? null
+      time: 0
     };
   }
 
@@ -800,11 +795,7 @@ export class CubeRenderer {
         mat.update();
       }
     }
-    if (fadeT >= 1) {
-      const done = glow.onDone;
-      this.clearGlow();
-      done?.();
-    }
+    if (fadeT >= 1) this.clearGlow();
   }
 
   // -------------------------------------------------------------------------

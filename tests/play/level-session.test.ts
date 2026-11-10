@@ -39,9 +39,7 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
       rendererState.endedLooks++;
     }
 
-    playPathGlow(_color: number, _path: number[], done?: () => void): void {
-      done?.();
-    }
+    playPathGlow(_color: number, _path: number[]): void {}
 
     update(): void {}
 
@@ -158,6 +156,25 @@ describe("LevelSession", () => {
     expect(session.solved).toBe(true);
     expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
     expect(callbacks.onHint).not.toHaveBeenCalled();
+  });
+
+  it("reports the solve once, not again when a linked path's last square is tapped", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const { session, callbacks, press, move, release } = makeSession(level);
+
+    for (const path of level.solution) {
+      press(path[0]);
+      for (let i = 1; i < path.length; i++) move(path[i]);
+      release();
+    }
+    expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
+
+    const path = level.solution[0];
+    press(path[path.length - 1]);
+    release();
+
+    expect(session.solved).toBe(true);
+    expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
   });
 
   it("keeps colour laid down when the drag is released short of the target", () => {
