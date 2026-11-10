@@ -279,6 +279,20 @@ body {
   transition: color 0.18s ease;
 }
 
+/* Same counter, used while no tab is shown: a single area has no tab row. */
+.zone-progress {
+  margin: 0;
+  min-height: 1.1em;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+}
+
+.zone-progress[hidden] {
+  display: none;
+}
+
 .zone-tab[aria-selected="true"] {
   color: var(--text);
 }
@@ -304,6 +318,24 @@ body {
 .zone-tab:disabled {
   color: #687186;
   cursor: not-allowed;
+}
+
+/* Only opened areas get a tab. `.zone-tab`'s display would beat the UA
+   [hidden] rule, so the attribute needs an explicit rule. */
+.zone-tab[hidden] {
+  display: none;
+}
+
+/* A newly opened area fades into the row instead of popping in. Opacity
+   only, so the underline still measures the final label box. */
+.zone-tab.is-revealing {
+  animation: tab-in 0.3s cubic-bezier(0.32, 0.04, 0.16, 1) both;
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .zone-tab:focus-visible {
@@ -591,7 +623,8 @@ body {
     font-size: clamp(24px, 5vh, 34px);
   }
 
-  .zone-tab-sub {
+  .zone-tab-sub,
+  .zone-progress {
     font-size: 9px;
   }
 

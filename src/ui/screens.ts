@@ -42,6 +42,8 @@ export class Screens {
   private readonly zoneHead: HTMLElement;
   private readonly tabsEl: HTMLElement;
   private readonly underline: HTMLElement;
+  /** Counter shown while no tab is visible (the very first area). */
+  private readonly zoneProgress: HTMLElement;
   private readonly grid: HTMLElement;
   private readonly hud: HTMLElement;
   private readonly hudLevel: HTMLElement;
@@ -56,6 +58,8 @@ export class Screens {
   private readonly tabs: HTMLButtonElement[] = [];
   private readonly doneState: boolean[] = [];
   private toastTimer = 0;
+  /** Timer done: the next player input may dismiss the toast. */
+  private toastDismissable = false;
   private transitionTimer = 0;
   private celebrateTimer = 0;
   private unlockTimer = 0;
@@ -85,6 +89,12 @@ export class Screens {
     underline.setAttribute("aria-hidden", "true");
     this.zoneHead.appendChild(underline);
     this.underline = underline;
+
+    const progress = document.createElement("p");
+    progress.className = "zone-progress";
+    progress.hidden = true;
+    this.zoneHead.appendChild(progress);
+    this.zoneProgress = progress;
 
     query("#btn-reset").addEventListener("click", () => this.hooks.onReset());
     this.menuButton.addEventListener("click", () => this.hooks.onMenu());
@@ -170,6 +180,7 @@ export class Screens {
   }
 
   showLevels(save: SaveData, area?: number, celebrate = false): void {
+    this.clearToast();
     const fromGame = this.levelScreen.classList.contains("is-hidden");
 
     if (celebrate && area !== undefined && area > 0) {
@@ -202,6 +213,7 @@ export class Screens {
   }
 
   showGame(levelIndex: number): void {
+    this.clearToast();
     this.activeZone = Math.max(this.activeZone, Math.floor(levelIndex / LEVELS_PER_ZONE));
     this.levelScreen.classList.add("is-hidden");
     this.hud.classList.remove("is-hidden");
@@ -212,6 +224,7 @@ export class Screens {
 
   /** Show the solved next-level button. `nextIndex` < 0 means there is no next level. */
   showSolved(nextIndex: number): void {
+    this.clearToast();
     const hasNext = nextIndex >= 0 && nextIndex < LEVEL_COUNT;
     const crossesZone = hasNext && nextIndex > 0 && nextIndex % LEVELS_PER_ZONE === 0;
     this.nextArea =
@@ -231,11 +244,46 @@ export class Screens {
     this.complete.classList.add("is-hidden");
   }
 
+  /**
+   * Show a message until the player acts.
+   *
+   * `duration` is a floor, not a deadline: the toast stays up while the player
+   * is idle, so an important hint is still on screen when they look back. It
+   * goes away on the first player input after that floor has elapsed.
+   */
   toast(message: string, duration = 2600): void {
+    this.unlistenToast();
     this.toastEl.textContent = message;
     this.toastEl.classList.add("show");
+    this.toastDismissable = false;
+    // Capture, so the input counts even when the level's own canvas handler
+    // would stop it. A press cannot dismiss the toast it just created: the
+    // window capture phase has already run by the time the hint is raised.
+    window.addEventListener("pointerdown", this.onToastAction, { capture: true, passive: true });
+    window.addEventListener("keydown", this.onToastAction, true);
     window.clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove("show"), duration);
+    this.toastTimer = window.setTimeout(() => {
+      this.toastTimer = 0;
+      this.toastDismissable = true;
+    }, duration);
+  }
+
+  private readonly onToastAction = (): void => {
+    if (this.toastDismissable) this.clearToast();
+  };
+
+  /** Drop the toast with its timer and input hooks, e.g. when the screen changes. */
+  private clearToast(): void {
+    window.clearTimeout(this.toastTimer);
+    this.toastTimer = 0;
+    this.toastDismissable = false;
+    this.unlistenToast();
+    this.toastEl.classList.remove("show");
+  }
+
+  private unlistenToast(): void {
+    window.removeEventListener("pointerdown", this.onToastAction, true);
+    window.removeEventListener("keydown", this.onToastAction, true);
   }
 
   // -------------------------------------------------------------------------
@@ -247,6 +295,7 @@ export class Screens {
       tab.id = `zone-tab-${index}`;
       tab.className = "zone-tab";
       tab.dataset.state = "locked";
+      tab.hidden = true;
       tab.setAttribute("role", "tab");
       tab.setAttribute("aria-controls", "level-grid");
 
@@ -268,6 +317,9 @@ export class Screens {
       tab.append(label, sub);
       tab.addEventListener("click", () => this.selectZone(index));
       tab.addEventListener("focus", () => this.selectZone(index));
+      tab.addEventListener("animationend", (event) => {
+        if (event.target === tab) tab.classList.remove("is-revealing");
+      });
       this.tabsEl.appendChild(tab);
       this.tabs.push(tab);
     });
@@ -297,14 +349,15 @@ export class Screens {
   }
 
   private selectZone(index: number): void {
-    if (!this.save || index === this.activeZone || this.tabs[index].disabled) return;
+    if (!this.save || index === this.activeZone) return;
+    if (this.tabs[index].hidden || this.tabs[index].disabled) return;
     this.setZone(index);
     this.hooks.onZone(index);
   }
 
   private setZone(index: number): void {
     const save = this.save;
-    if (!save || this.tabs[index].disabled) return;
+    if (!save || this.tabs[index].hidden || this.tabs[index].disabled) return;
     const from = this.activeZone;
     this.activeZone = index;
     this.updateTabs(save);
@@ -345,6 +398,18 @@ export class Screens {
     this.tabs.forEach((tab, index) => {
       const zone = ZONES[index];
       const reached = isUnlocked(save, zone.from);
+      // A tab appears only once its area opens, i.e. the previous area is done.
+      // The first area has no previous area, so a lone tab would be noise: it
+      // waits for the second area while `.zone-progress` carries the counter.
+      const visible = index === 0 ? ZONES.length > 1 && isUnlocked(save, ZONES[1].from) : reached;
+      const reveal = tab.hidden && visible;
+      tab.hidden = !visible;
+      if (reveal) {
+        // A freshly opened area fades in instead of popping into the row.
+        tab.classList.remove("is-revealing");
+        void tab.offsetWidth;
+        tab.classList.add("is-revealing");
+      }
       const active = index === this.activeZone;
       const state: TabState = this.zoneDone(save, index) ? "done" : reached ? "todo" : "locked";
       tab.disabled = !reached;
@@ -376,6 +441,10 @@ export class Screens {
       }
       const sub = tab.querySelector<HTMLElement>(".zone-tab-sub");
       if (sub) sub.textContent = index === this.activeZone ? `${done} / ${total}` : "";
+      if (index === this.activeZone) {
+        this.zoneProgress.textContent = `${done} / ${total}`;
+        this.zoneProgress.hidden = !tab.hidden;
+      }
       tab.setAttribute("aria-label", `${zone.name}: ${done} of ${total} levels complete`);
     });
   }
@@ -398,7 +467,11 @@ export class Screens {
   /** Park the tab line under `index`, sliding from `from` when given. */
   private placeUnderline(index: number, from?: number): void {
     const target = this.labelRect(index);
-    if (!target) return;
+    if (!target) {
+      for (const animation of this.underline.getAnimations()) animation.cancel();
+      this.underline.style.opacity = "0";
+      return;
+    }
     const source = from !== undefined && from !== index ? this.labelRect(from) : null;
     for (const animation of this.underline.getAnimations()) animation.cancel();
     if (source) {
@@ -456,7 +529,7 @@ function arrowNav(container: HTMLElement, columns: number): void {
   container.addEventListener("keydown", (event) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const items = Array.from(container.querySelectorAll<HTMLButtonElement>(":scope > button")).filter(
-      (el) => !el.classList.contains("is-hidden") && !el.disabled
+      (el) => !el.hidden && !el.classList.contains("is-hidden") && !el.disabled
     );
     const current = items.indexOf(event.target as HTMLButtonElement);
     if (current < 0) return;
