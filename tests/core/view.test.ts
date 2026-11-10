@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { FACES, PLAY_FACES, buildLayout } from "../../src/core/layout.ts";
-import { quatIdentity, quatRotate, type Quat, type Vec3 } from "../../src/core/math.ts";
-import { TILT_MAX, VIEW_DIR, tiltQuat, visibleFaceCount } from "../../src/core/view.ts";
+import { quatIdentity, quatMul, quatRotate, type Quat, type Vec3 } from "../../src/core/math.ts";
+import {
+  LOOK_MIN_FACING,
+  TILT_MAX,
+  VIEW_DIR,
+  advanceLook,
+  axisAngleQuat,
+  playFacesFacing,
+  tiltQuat,
+  visibleFaceCount
+} from "../../src/core/view.ts";
 
 const PLAY = new Set<number>(PLAY_FACES);
 const close = (a: number, b: number, eps = 1e-9): boolean => Math.abs(a - b) <= eps;
@@ -21,6 +30,20 @@ function quatFromAxis(axis: Vec3, angle: number): Quat {
   const s = Math.sin(angle / 2);
   return [n[0] * s, n[1] * s, n[2] * s, Math.cos(angle / 2)];
 }
+
+/** Same rotation, allowing the double cover (q and -q). */
+function sameRotation(a: Quat, b: Quat): boolean {
+  const d = Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+  return d > 1 - 1e-9;
+}
+
+/** Screen-right and screen-up, as the renderer derives them from the camera. */
+const RIGHT: Vec3 = normalize([VIEW_DIR[2], 0, -VIEW_DIR[0]]);
+const UP: Vec3 = [
+  VIEW_DIR[1] * RIGHT[2] - VIEW_DIR[2] * RIGHT[1],
+  VIEW_DIR[2] * RIGHT[0] - VIEW_DIR[0] * RIGHT[2],
+  VIEW_DIR[0] * RIGHT[1] - VIEW_DIR[1] * RIGHT[0]
+];
 
 function visibleFaces(q: Quat): number[] {
   const visible: number[] = [];
@@ -122,5 +145,85 @@ describe("visibleFaceCount", () => {
     const q = quatFromAxis([1, 0, 0], Math.PI / 4);
     expect(close(quatRotate(q, [0, 0, 1])[1], -Math.SQRT1_2)).toBe(true);
     expect(visibleFaceCount(q)).toBe(2);
+  });
+});
+
+describe("axisAngleQuat", () => {
+  it("matches a normalised axis and ignores a zero angle", () => {
+    expect(sameRotation(axisAngleQuat([2, 0, 0], 0.4), quatFromAxis([1, 0, 0], 0.4))).toBe(true);
+    expect(axisAngleQuat([1, 0, 0], 0)).toEqual(quatIdentity());
+    expect(axisAngleQuat([0, 0, 0], 1)).toEqual(quatIdentity());
+  });
+});
+
+describe("playFacesFacing", () => {
+  it("accepts the base orientation and rejects one that swaps a play face out", () => {
+    expect(playFacesFacing(quatIdentity())).toBe(true);
+    // 40 degrees about the screen's up axis still shows three faces, but one of
+    // them is the hidden -X face: the play field has turned out of view.
+    const q = quatFromAxis(UP, (40 * Math.PI) / 180);
+    expect(visibleFaceCount(q)).toBe(3);
+    expect(visibleFaces(q).every((face) => PLAY.has(face))).toBe(false);
+    expect(playFacesFacing(q)).toBe(false);
+  });
+
+  it("keeps the play faces inside the facing limit it documents", () => {
+    const q = quatFromAxis(UP, (20 * Math.PI) / 180);
+    expect(playFacesFacing(q)).toBe(true);
+    for (const face of PLAY_FACES) {
+      const n = quatRotate(q, FACES[face].n);
+      expect(n[0] * VIEW_DIR[0] + n[1] * VIEW_DIR[1] + n[2] * VIEW_DIR[2]).toBeGreaterThan(
+        LOOK_MIN_FACING
+      );
+    }
+  });
+});
+
+describe("advanceLook", () => {
+  it("applies a turn that fits to the whole orientation", () => {
+    const from = quatFromAxis(RIGHT, 0.05);
+    expect(sameRotation(advanceLook(from, UP, 0.2), quatMul(quatFromAxis(UP, 0.2), from))).toBe(
+      true
+    );
+  });
+
+  it("leaves the orientation alone for a zero-angle move", () => {
+    const from = quatFromAxis(RIGHT, 0.3);
+    expect(advanceLook(from, UP, 0)).toEqual(from);
+  });
+
+  it("stops at the largest turn that keeps the play faces in view", () => {
+    const turned = advanceLook(quatIdentity(), UP, 1);
+    expect(playFacesFacing(turned)).toBe(true);
+    expect(visibleFaceCount(turned)).toBe(3);
+    expect(visibleFaces(turned).every((face) => PLAY.has(face))).toBe(true);
+    // About 23 degrees: any further and +X would tip out of the view.
+    expect(tiltAngle(turned)).toBeCloseTo(0.407, 2);
+    // Held at the limit it stays put (to within the facing margin) and it
+    // still turns back.
+    const pushed = advanceLook(turned, UP, 0.2);
+    expect(playFacesFacing(pushed)).toBe(true);
+    expect(tiltAngle(pushed)).toBeCloseTo(tiltAngle(turned), 3);
+    expect(sameRotation(advanceLook(turned, UP, -0.05), turned)).toBe(false);
+  });
+
+  it("keeps the play faces in view through a long two-axis drag", () => {
+    let q = quatIdentity();
+    const steps = [
+      [18, 0],
+      [18, 9],
+      [0, 18],
+      [-24, 0],
+      [0, -30],
+      [-30, -30],
+      [45, 45],
+      [-60, 40]
+    ];
+    for (const [dx, dy] of steps) {
+      q = advanceLook(q, UP, dx * 0.02);
+      q = advanceLook(q, RIGHT, dy * 0.02);
+      expect(playFacesFacing(q)).toBe(true);
+      expect(visibleFaces(q).every((face) => PLAY.has(face))).toBe(true);
+    }
   });
 });

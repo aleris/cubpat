@@ -1,8 +1,8 @@
 import * as pc from "playcanvas";
 import { FACES, projectToSquare, type CubeLayout } from "../core/layout.ts";
 import type { Level } from "../core/level.ts";
-import { cross, dot, madd, type Vec3 } from "../core/math.ts";
-import { TILT_MAX, tiltQuat } from "../core/view.ts";
+import { cross, dot, madd, quatMul, type Quat, type Vec3 } from "../core/math.ts";
+import { TILT_MAX, advanceLook, playFacesFacing, tiltQuat } from "../core/view.ts";
 import { drawIconAtlas } from "./icon-atlas.ts";
 import { drawTilePattern, TILE_PATTERN_SIZE } from "./tile-patterns.ts";
 import {
@@ -37,6 +37,10 @@ const BODY_BEVEL = 0.02;
 const PICK_HALF = 0.5 + TILE_THICKNESS;
 /** Time constant of the lean as it follows the pointer, in seconds. */
 const TILT_FOLLOW = 0.08;
+/** Radians the cube turns per CSS pixel of an inspection drag. */
+const LOOK_RATE = 0.004;
+/** Time constant of the inspection turn as it follows the drag and returns. */
+const LOOK_FOLLOW = 0.08;
 /**
  * Distance beyond the cube over which the lean fades out, in cube widths.
  * The pointer keeps steering the cube just outside the silhouette, and a
@@ -97,8 +101,10 @@ export class CubeRenderer {
   readonly layout: CubeLayout;
   readonly level: Level;
 
-  /** Parent of `root` that carries the level-start flight; `root` keeps the lean. */
+  /** Parent of `look` that carries the level-start flight. */
   private readonly stage: pc.Entity;
+  /** Parent of `root` that carries the drag turn; `root` keeps the lean. */
+  private readonly lookPivot: pc.Entity;
   private introTime = 0;
   private readonly introFrom = new pc.Vec3();
   private readonly introQuat = new pc.Quat();
@@ -131,6 +137,10 @@ export class CubeRenderer {
   private readonly tiltTarget = new pc.Quat();
   private readonly tiltTmp = new pc.Quat();
   private readonly tiltUpright = new pc.Quat();
+  /** Drag turn the cube follows, and whether a drag is driving it. */
+  private readonly lookTarget = new pc.Quat();
+  private readonly lookTmp = new pc.Quat();
+  private readonly leanTmp = new pc.Quat();
   private readonly focusPoint: Vec3 = [0, 0, 0];
 
   private glow: GlowState | null = null;
@@ -165,8 +175,10 @@ export class CubeRenderer {
 
     this.stage = new pc.Entity("cube-stage");
     app.root.addChild(this.stage);
+    this.lookPivot = new pc.Entity("cube-look");
+    this.stage.addChild(this.lookPivot);
     this.root = new pc.Entity("cube-root");
-    this.stage.addChild(this.root);
+    this.lookPivot.addChild(this.root);
     this.root.setLocalRotation(new pc.Quat());
 
     // The body is the visible surface beneath the squares: one closed box with
@@ -492,6 +504,55 @@ export class CubeRenderer {
     this.tiltTarget.set(0, 0, 0, 1);
   }
 
+  // -------------------------------------------------------------------------
+  // inspection: dragging the empty space around the cube turns it
+  // -------------------------------------------------------------------------
+
+  /** Take the cube for an inspection drag; the lean drops to upright. */
+  startLook(): void {
+    this.tiltTarget.set(0, 0, 0, 1);
+  }
+
+  /**
+   * Turn the cube by a pointer move of `dx`, `dy` CSS pixels. A horizontal
+   * move spins it about the screen's up axis and a vertical one about its
+   * right axis, so the visible surface follows the pointer. The turn stops
+   * where the three play faces would leave the view.
+   */
+  look(dx: number, dy: number): void {
+    if (dx === 0 && dy === 0) return;
+    const up = this.camera.up;
+    const right = this.camera.right;
+    let q: Quat = [this.lookTarget.x, this.lookTarget.y, this.lookTarget.z, this.lookTarget.w];
+    q = advanceLook(q, [up.x, up.y, up.z], dx * LOOK_RATE);
+    q = advanceLook(q, [right.x, right.y, right.z], dy * LOOK_RATE);
+    this.lookTarget.set(q[0], q[1], q[2], q[3]);
+  }
+
+  /** Release the cube: it turns back to its rest orientation. */
+  endLook(): void {
+    this.lookTarget.set(0, 0, 0, 1);
+  }
+
+  private updateLook(dt: number): void {
+    const target = this.lookTarget;
+    const current = this.lookPivot.getLocalRotation();
+    const dot = Math.abs(
+      current.x * target.x + current.y * target.y + current.z * target.z + current.w * target.w
+    );
+    if (dot > 0.999999999) return;
+    this.lookTmp.slerp(current, target, 1 - Math.exp(-dt / LOOK_FOLLOW));
+    this.lookPivot.setLocalRotation(this.lookTmp);
+  }
+
+  /** True while `lean` on top of the inspection turn `look` keeps the play
+   *  faces towards the camera. */
+  private facesFacing(look: pc.Quat, lean: pc.Quat): boolean {
+    return playFacesFacing(
+      quatMul([look.x, look.y, look.z, look.w], [lean.x, lean.y, lean.z, lean.w])
+    );
+  }
+
   private updateTilt(dt: number): void {
     const target = this.tiltTarget;
     const current = this.root.getLocalRotation();
@@ -501,6 +562,21 @@ export class CubeRenderer {
     // Settled to within ~1e-3 degrees: stop touching the entity.
     if (dot > 0.999999999) return;
     this.tiltTmp.slerp(current, target, 1 - Math.exp(-dt / TILT_FOLLOW));
+    // The turn and the lean both rotate the cube, so it is their product that
+    // has to clear the inspection limit: a lean added on top of a turn held at
+    // the limit would otherwise push a play face out of view.
+    if (!this.facesFacing(this.lookPivot.getLocalRotation(), this.tiltTmp)) {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) * 0.5;
+        this.leanTmp.slerp(this.tiltUpright, this.tiltTmp, mid);
+        if (this.facesFacing(this.lookPivot.getLocalRotation(), this.leanTmp)) lo = mid;
+        else hi = mid;
+      }
+      this.root.setLocalRotation(this.leanTmp.slerp(this.tiltUpright, this.tiltTmp, lo));
+      return;
+    }
     this.root.setLocalRotation(this.tiltTmp);
   }
 
@@ -738,6 +814,7 @@ export class CubeRenderer {
   update(dt: number): void {
     this.time += dt;
     this.updateIntro(dt);
+    this.updateLook(dt);
     this.updateTilt(dt);
 
     this.updateGlow(dt);

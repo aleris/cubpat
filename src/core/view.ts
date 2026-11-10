@@ -3,8 +3,17 @@
  * lean towards the square under the pointer. Engine independent.
  */
 
-import { FACES } from "./layout.ts";
-import { clamp, normalize, quatIdentity, quatRotate, type Quat, type Vec3 } from "./math.ts";
+import { FACES, PLAY_FACES } from "./layout.ts";
+import {
+  clamp,
+  dot,
+  normalize,
+  quatIdentity,
+  quatMul,
+  quatRotate,
+  type Quat,
+  type Vec3
+} from "./math.ts";
 
 /** Camera direction: (1,1,1) normalised, looking at the cube centre. */
 export const VIEW_DIR: Vec3 = normalize([1, 1, 1]);
@@ -43,6 +52,55 @@ export function tiltQuat(point: Vec3, maxAngle: number = TILT_MAX): Quat {
   const half = Math.min(angle, maxAngle) * 0.5;
   const s = Math.sin(half);
   return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(half)];
+}
+
+/**
+ * Smallest dot a play face normal may make with the view direction while the
+ * cube is turned by hand. Well above zero, so the face keeps enough of its area
+ * to read instead of grazing the silhouette, and low enough that the lean on
+ * its own (worst case 0.297) never reaches it.
+ */
+export const LOOK_MIN_FACING = 0.25;
+
+/** Rotation of `angle` radians about `axis`, which need not be normalised. */
+export function axisAngleQuat(axis: Vec3, angle: number): Quat {
+  const len = Math.hypot(axis[0], axis[1], axis[2]);
+  if (len < 1e-9 || angle === 0) return quatIdentity();
+  const s = Math.sin(angle * 0.5) / len;
+  return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle * 0.5)];
+}
+
+/**
+ * True while every play face still faces the camera after the cube is rotated
+ * by `q`. The hidden faces then stay hidden and no play face is lost, so the
+ * play field and everything drawn on it stays readable.
+ */
+export function playFacesFacing(q: Quat): boolean {
+  for (const face of PLAY_FACES) {
+    const n = quatRotate(q, FACES[face].n);
+    if (dot(n, VIEW_DIR) < LOOK_MIN_FACING) return false;
+  }
+  return true;
+}
+
+/**
+ * Turn the cube from `from` about a camera-space `axis` by `angle` radians,
+ * stopping at the largest shorter turn that keeps the play faces towards the
+ * camera. A step that fits is applied whole, so a drag inside the limit tracks
+ * the pointer exactly; one that would overshoot just stops at the limit.
+ */
+export function advanceLook(from: Quat, axis: Vec3, angle: number): Quat {
+  if (angle === 0) return from;
+  const full = quatMul(axisAngleQuat(axis, angle), from);
+  if (playFacesFacing(full)) return full;
+  let lo = 0;
+  let hi = angle;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) * 0.5;
+    if (playFacesFacing(quatMul(axisAngleQuat(axis, mid), from))) lo = mid;
+    else hi = mid;
+  }
+  return quatMul(axisAngleQuat(axis, lo), from);
 }
 
 /** Number of cube faces whose normal points towards the camera. The play field

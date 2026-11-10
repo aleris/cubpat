@@ -28,7 +28,8 @@ export interface SessionCallbacks {
  * laid down, and pressing any coloured square truncates the path back to that
  * square (so the press that starts a drag also reopens the path there). A tap
  * on a grey square that touches the open end of a path colours it, which makes
- * the puzzle playable by tapping alone.
+ * the puzzle playable by tapping alone. A drag that starts beside the cube turns
+ * the cube to inspect its play faces, and releasing turns it back upright.
  */
 export class LevelSession {
   readonly level: Level;
@@ -44,6 +45,11 @@ export class LevelSession {
   private drag: DragState | null = null;
   /** Pointer currently driving the board; extra touches are ignored. */
   private activePointer: number | null = null;
+  /** Pointer position at the last inspection-drag sample, in client pixels. */
+  private lookX = 0;
+  private lookY = 0;
+  /** True while a drag on the empty space is turning the cube. */
+  private looking = false;
   private disposed = false;
   /** Colour touched last: the one a tap on a grey square extends. */
   private activeColor = -1;
@@ -58,7 +64,11 @@ export class LevelSession {
     this.pointerUp(e);
     this.renderer.clearCursor();
   };
-  private readonly onPointerLeave = (): void => this.renderer.clearCursor();
+  private readonly onPointerLeave = (): void => {
+    // A lost capture must not strand the cube at an inspection angle.
+    if (this.looking) this.endLook();
+    this.renderer.clearCursor();
+  };
   private readonly onUpdate = (dt: number): void => this.renderer.update(dt);
 
   constructor(app: pc.AppBase, camera: pc.Entity, canvas: HTMLCanvasElement, level: Level, callbacks: SessionCallbacks) {
@@ -102,6 +112,8 @@ export class LevelSession {
     this.activePointer = null;
     this.activeColor = -1;
     this.solved = false;
+    this.looking = false;
+    this.renderer.endLook();
     this.renderer.stopGlow();
     this.renderer.setHead(-1);
     this.renderer.setHover(-1);
@@ -141,7 +153,12 @@ export class LevelSession {
     this.renderer.setCursor(e.clientX, e.clientY);
 
     const square = this.renderer.pick(e.clientX, e.clientY);
-    if (square === null) return;
+    if (square === null) {
+      // Empty space around the cube: the drag turns the cube instead of
+      // drawing, so the player can look at the play faces from another angle.
+      this.beginLook(e.clientX, e.clientY);
+      return;
+    }
 
     const color = this.owners[square];
     let fromStop = false;
@@ -157,12 +174,16 @@ export class LevelSession {
 
   private pointerMove(e: PointerEvent): void {
     if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
+    if (this.looking) {
+      this.turnLook(e.clientX, e.clientY);
+      return;
+    }
     // The lean follows every move, not just the square changes: that is what
     // slides the next square under the pointer.
     this.renderer.setCursor(e.clientX, e.clientY);
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
-      this.canvas.style.cursor = "default";
+      this.canvas.style.cursor = "grab";
       this.renderer.setHover(-1);
       return;
     }
@@ -183,6 +204,13 @@ export class LevelSession {
     const drag = this.drag;
     this.drag = null;
     this.renderer.setHead(-1);
+    if (this.looking) {
+      this.endLook();
+      // A touch has no hover: drop the lean with the finger. A mouse keeps
+      // leaning while it stays over the cube.
+      if (e.pointerType !== "mouse") this.renderer.clearCursor();
+      return;
+    }
     // A touch has no hover: drop the lean with the finger. A mouse keeps
     // leaning while it stays over the cube.
     if (e.pointerType !== "mouse") this.renderer.clearCursor();
@@ -199,6 +227,32 @@ export class LevelSession {
       this.unfinishedHinted = true;
       this.callbacks.onHint("You can continue any path later from where you left it");
     }
+  }
+
+  /** Start turning the cube from a drag that began beside it. */
+  private beginLook(x: number, y: number): void {
+    this.looking = true;
+    this.lookX = x;
+    this.lookY = y;
+    this.renderer.setHover(-1);
+    this.renderer.startLook();
+    this.canvas.style.cursor = "grabbing";
+  }
+
+  /** Feed the inspection drag a pointer move, in client pixels. */
+  private turnLook(x: number, y: number): void {
+    const dx = x - this.lookX;
+    const dy = y - this.lookY;
+    this.lookX = x;
+    this.lookY = y;
+    this.renderer.look(dx, dy);
+  }
+
+  /** Let go of the cube: it turns back to its rest orientation. */
+  private endLook(): void {
+    this.looking = false;
+    this.renderer.endLook();
+    this.canvas.style.cursor = "default";
   }
 
   // -------------------------------------------------------------------------

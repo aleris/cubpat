@@ -6,7 +6,9 @@ import { LevelSession } from "../../src/play/level-session.ts";
 
 const rendererState = vi.hoisted(() => ({
   instance: null as null | { destroyed: boolean },
-  pick: null as number | null
+  pick: null as number | null,
+  looks: [] as Array<[number, number]>,
+  endedLooks: 0
 }));
 
 vi.mock("../../src/render/cube-renderer.ts", () => {
@@ -27,6 +29,15 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
     setBoard(): void {}
     clearCursor(): void {}
     stopGlow(): void {}
+    startLook(): void {}
+
+    look(dx: number, dy: number): void {
+      rendererState.looks.push([dx, dy]);
+    }
+
+    endLook(): void {
+      rendererState.endedLooks++;
+    }
 
     playPathGlow(_color: number, _path: number[], done?: () => void): void {
       done?.();
@@ -91,6 +102,8 @@ function makeSession(level: Level) {
     callbacks
   );
   rendererState.pick = null;
+  rendererState.looks.length = 0;
+  rendererState.endedLooks = 0;
 
   const press = (square: number): void => {
     rendererState.pick = square;
@@ -267,6 +280,61 @@ describe("LevelSession", () => {
     move(path[2]);
     expect(session.paths[0]).toEqual(path.slice(0, 3));
     release();
+  });
+
+  it("turns the cube with a drag that starts on the empty space beside it", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const { session, canvas } = makeSession(level);
+
+    canvas.emit("pointerdown", { clientX: 10, clientY: 10 });
+    expect(canvas.style.cursor).toBe("grabbing");
+
+    canvas.emit("pointermove", { clientX: 40, clientY: 25 });
+    canvas.emit("pointermove", { clientX: 30, clientY: 5 });
+    expect(rendererState.looks).toEqual([
+      [30, 15],
+      [-10, -20]
+    ]);
+
+    // A turn draws nothing.
+    expect(session.paths.every((path) => path.length === 0)).toBe(true);
+    expect(Array.from(session.owners)).toEqual(Array.from(level.initial));
+
+    canvas.emit("pointerup");
+    expect(rendererState.endedLooks).toBe(1);
+    expect(canvas.style.cursor).toBe("default");
+  });
+
+  it("does not turn the cube when the drag starts on a square", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { press, move, release } = makeSession(level);
+
+    press(path[0]);
+    move(path[1]);
+    release();
+
+    expect(rendererState.looks).toEqual([]);
+  });
+
+  it("ignores extra pointers while a turn is in progress", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const { canvas } = makeSession(level);
+
+    canvas.emit("pointerdown", { clientX: 0, clientY: 0 });
+    canvas.emit("pointermove", { clientX: 20, clientY: 0 });
+    const moved = rendererState.looks.slice();
+
+    // A second finger lands and lifts; it must neither turn the cube nor end
+    // the first finger's turn.
+    canvas.emit("pointerdown", { pointerId: 2, pointerType: "touch", clientX: 200, clientY: 200 });
+    canvas.emit("pointermove", { pointerId: 2, pointerType: "touch", clientX: 400, clientY: 400 });
+    canvas.emit("pointerup", { pointerId: 2, pointerType: "touch" });
+    expect(rendererState.looks).toEqual(moved);
+
+    canvas.emit("pointermove", { clientX: 25, clientY: 0 });
+    expect(rendererState.looks).toEqual([...moved, [5, 0]]);
+    canvas.emit("pointerup");
   });
 
   it("removes its listeners and destroys the renderer when disposed", () => {

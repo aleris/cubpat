@@ -53,6 +53,15 @@ touch icon.
   jumps. A lifted touch lets the cube stand upright. The cap stays well below the
   ~35 degrees that would bring another face into view, so the visible three never
   change.
+- **Look around.** Pressing the empty space beside the cube and dragging turns
+  it, so any of the three play faces can be brought nearly square-on: a
+  horizontal drag swings the cube about the screen's vertical axis, a vertical
+  drag tips it about the screen's horizontal one, following the pointer like a
+  trackball. The turn stops at the largest step that keeps every play face at
+  least 75 degrees from the view axis, so a hidden face never comes into view
+  and no play face is left as a hairline sliver. Releasing turns the cube back
+  to its rest angle. The pointer shows a grab cursor, and a grabbing one while
+  turning, over the empty space.
 - **Path markers.** While a colour has a path (being dragged or linked), the
   square it was started from shows a ▶ icon, its pair shows a ■ icon, and every
   two neighbouring squares of the path are joined by a 3D stitch: a half-torus
@@ -133,7 +142,7 @@ src/main.ts              entry: hash routing, screens/level wiring
 src/core/                puzzle domain, no DOM and no engine
   layout.ts              three-face surface graph, adjacency, square projection
   math.ts                vectors and quaternions over plain tuples
-  view.ts                camera direction, pointer lean, visible-face check
+  view.ts                camera direction, pointer lean, inspection turn limits
   rng.ts                 seeded randomness
   palette.ts             hsl→hex and the generated level palette
   curve.ts               grading curve and level configs
@@ -142,11 +151,12 @@ src/core/                puzzle domain, no DOM and no engine
   preview.ts             isometric projection: one quad per mini-cube tile
 src/render/              PlayCanvas presentation
   scene.ts               engine bootstrap, isometric camera, lights
-  cube-renderer.ts       tiles, materials, lean, picking, glow
+  cube-renderer.ts       tiles, materials, lean, drag turn, picking, glow
   meshes.ts              rounded body/tile and stitch meshes
   icon-atlas.ts          start/stop glyph atlas
 src/play/
-  level-session.ts       drag rules: extend, truncate, release, completion
+  level-session.ts       drag rules: extend, truncate, release, completion;
+                         empty-space drags turn the cube
 src/ui/
   screens.ts             area tabs, level grid (5×5 mini cubes), HUD,
                          solved dock, toast
@@ -179,6 +189,10 @@ vitest.config.ts         node environment, 60 s test timeout
   aimed from every square centre and from the whole rim of the three faces
   (the pointer can now lean the cube from anywhere on its surface), and always
   turns the aimed point towards the camera;
+- the inspection turn applies a fitting step whole, stops at the largest shorter
+  step that keeps every play face above the facing floor, holds there under a
+  continued drag but still turns back, and stays inside the floor through a long
+  two-axis drag;
 - the grading curve;
 - 375 generated levels (75 levels × 5 seeds): full coverage, adjacency along
   every path, endpoint pairs distinct and exposed alone in the start state,
@@ -201,7 +215,8 @@ vitest.config.ts         node environment, 60 s test timeout
 - session rules, driven through the real pointer handlers with a stubbed
   renderer: drag to extend, release short of the target, press-to-truncate,
   tap-to-grow, tap-to-link, extra-pointer isolation, hints for unreachable grey
-  squares, reset, and listener/renderer disposal;
+  squares, turning the cube from an empty-space drag (and not from a square),
+  reset, and listener/renderer disposal;
 - procedural mesh geometry: quad vertex/normal/UV layout, stitch tube radius and
   winding, index offsets when appending, and degenerate inputs;
 - save persistence: fresh saves, unsigned seed normalization, filtering
