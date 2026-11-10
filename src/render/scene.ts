@@ -1,4 +1,6 @@
 import * as pc from "playcanvas";
+import { normalize, quatRotate, type Quat, type Vec3 } from "../core/math.ts";
+import { TILT_MAX, VIEW_DIR } from "../core/view.ts";
 
 export interface GameApp {
   app: pc.AppBase;
@@ -6,10 +8,68 @@ export interface GameApp {
   canvas: HTMLCanvasElement;
 }
 
-const CAMERA_DIR = new pc.Vec3(1, 1, 1).normalize();
+const CAMERA_DIR = new pc.Vec3(VIEW_DIR[0], VIEW_DIR[1], VIEW_DIR[2]);
 /** Circumscribed radius of the unit cube [-0.5, 0.5]^3. */
 const CUBE_RADIUS = Math.sqrt(3) * 0.5;
 const FOV = 30;
+/**
+ * Share of the screen width the cube may span on a narrow (portrait) screen,
+ * measured at its widest lean. The rest is a hairline gutter for the raised
+ * tiles and the antialiased edge.
+ */
+const WIDTH_FILL = 0.96;
+
+/**
+ * Cube corners under every lean the pointer can cause, as interleaved pairs of
+ * (|screen-right offset|, offset towards the camera). The lean turns the cube
+ * by up to `TILT_MAX` about any axis in the image plane, which widens the
+ * silhouette, so fitting the width to the rest pose would clip a leaning cube.
+ */
+const LEAN_CORNERS: Float64Array = (() => {
+  const right = normalize([VIEW_DIR[2], 0, -VIEW_DIR[0]]);
+  const up: Vec3 = [
+    VIEW_DIR[1] * right[2] - VIEW_DIR[2] * right[1],
+    VIEW_DIR[2] * right[0] - VIEW_DIR[0] * right[2],
+    VIEW_DIR[0] * right[1] - VIEW_DIR[1] * right[0]
+  ];
+  const AZIMUTHS = 72;
+  const ANGLES = 6;
+  const out: number[] = [];
+  for (let a = 0; a < AZIMUTHS; a++) {
+    const phi = (a / AZIMUTHS) * Math.PI * 2;
+    const axis: Vec3 = [
+      right[0] * Math.cos(phi) + up[0] * Math.sin(phi),
+      right[1] * Math.cos(phi) + up[1] * Math.sin(phi),
+      right[2] * Math.cos(phi) + up[2] * Math.sin(phi)
+    ];
+    for (let k = 0; k <= ANGLES; k++) {
+      const s = Math.sin(((k / ANGLES) * TILT_MAX) / 2);
+      const q: Quat = [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(((k / ANGLES) * TILT_MAX) / 2)];
+      for (let corner = 0; corner < 8; corner++) {
+        const p = quatRotate(q, [corner & 1 ? 0.5 : -0.5, corner & 2 ? 0.5 : -0.5, corner & 4 ? 0.5 : -0.5]);
+        out.push(
+          Math.abs(p[0] * right[0] + p[1] * right[1] + p[2] * right[2]),
+          p[0] * VIEW_DIR[0] + p[1] * VIEW_DIR[1] + p[2] * VIEW_DIR[2]
+        );
+      }
+    }
+  }
+  return Float64Array.from(out);
+})();
+
+/**
+ * Camera distance at which the widest leaning cube spans `WIDTH_FILL` of the
+ * view, given the tangent of the horizontal half field of view. A corner at
+ * screen-right offset x and depth z towards the camera projects to x / (d - z).
+ */
+function widthFitDistance(tanHalfWidth: number): number {
+  const limit = tanHalfWidth * WIDTH_FILL;
+  let distance = 0;
+  for (let i = 0; i < LEAN_CORNERS.length; i += 2) {
+    distance = Math.max(distance, LEAN_CORNERS[i + 1] + LEAN_CORNERS[i] / limit);
+  }
+  return distance;
+}
 
 /** Boot a standalone PlayCanvas 2 application with a fixed isometric camera. */
 export async function createGameApp(canvas: HTMLCanvasElement): Promise<GameApp> {
@@ -74,16 +134,18 @@ export async function createGameApp(canvas: HTMLCanvasElement): Promise<GameApp>
 
   let fittedWidth = 0;
   let fittedHeight = 0;
+  // Wide screens frame the cube's bounding sphere with a margin against the
+  // height. Narrow (portrait, i.e. phone) screens would leave it small that
+  // way, so there the cube's actual silhouette fills the width instead; the
+  // farther of the two distances wins, so neither axis clips.
   const fitCamera = (): void => {
     const width = Math.max(1, app.graphicsDevice.width);
     const height = Math.max(1, app.graphicsDevice.height);
     fittedWidth = width;
     fittedHeight = height;
-    const aspect = width / height;
     const vHalf = (FOV * Math.PI) / 360;
-    const hHalf = Math.atan(Math.tan(vHalf) * aspect);
-    const half = Math.min(vHalf, hHalf);
-    const distance = (CUBE_RADIUS / Math.sin(half)) * 1.2;
+    const heightFit = (CUBE_RADIUS / Math.sin(vHalf)) * 1.2;
+    const distance = Math.max(heightFit, widthFitDistance(Math.tan(vHalf) * (width / height)));
     camera.setPosition(CAMERA_DIR.x * distance, CAMERA_DIR.y * distance, CAMERA_DIR.z * distance);
     camera.lookAt(0, 0, 0);
   };
