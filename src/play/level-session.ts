@@ -7,6 +7,10 @@ interface DragState {
   color: number;
   target: number;
   reached: boolean;
+  /** Pressed on the last square of a linked path, which on its own changes nothing. */
+  fromStop: boolean;
+  /** The drag laid down at least one new square. */
+  drew: boolean;
 }
 
 export interface SessionCallbacks {
@@ -43,6 +47,8 @@ export class LevelSession {
   private disposed = false;
   /** Colour touched last: the one a tap on a grey square extends. */
   private activeColor = -1;
+  /** The "continue an unfinished path" hint is shown once per level. */
+  private unfinishedHinted = false;
 
   private readonly onPointerDown = (e: PointerEvent): void => this.pointerDown(e);
   private readonly onPointerMove = (e: PointerEvent): void => this.pointerMove(e);
@@ -138,12 +144,15 @@ export class LevelSession {
     if (square === null) return;
 
     const color = this.owners[square];
+    let fromStop = false;
     if (color >= 0) {
       if (this.linkFromSquare(color, square)) return;
+      const path = this.paths[color];
+      fromStop = this.complete[color] && square === path[path.length - 1];
       this.beginPath(color, square);
     } else if (!this.growIntoEmpty(square)) return;
 
-    this.beginDrag(this.activeColor);
+    this.beginDrag(this.activeColor, fromStop);
   }
 
   private pointerMove(e: PointerEvent): void {
@@ -177,9 +186,19 @@ export class LevelSession {
     // A touch has no hover: drop the lean with the finger. A mouse keeps
     // leaning while it stays over the cube.
     if (e.pointerType !== "mouse") this.renderer.clearCursor();
-    // Releasing short of the pair's second square keeps the path as drawn: the
-    // player can pick it up again from any of its squares.
-    if (drag && drag.reached) this.completeColor(drag.color);
+    if (!drag) return;
+    if (drag.reached) {
+      this.completeColor(drag.color);
+    } else if (drag.fromStop && this.complete[drag.color] && e.type === "pointerup") {
+      // A tap on a linked path's last square leaves it as is; dragging back from
+      // there truncates and clears `complete`, so only a plain tap gets the hint.
+      this.callbacks.onHint("This path is linked — tap its start square to reset it");
+    } else if (drag.drew && !this.complete[drag.color] && !this.unfinishedHinted) {
+      // Releasing short of the pair's second square keeps the path as drawn;
+      // say so once, so the player knows the path can be picked up again.
+      this.unfinishedHinted = true;
+      this.callbacks.onHint("You can continue any path later from where you left it");
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -187,10 +206,10 @@ export class LevelSession {
   // -------------------------------------------------------------------------
 
   /** Arm a drag from the open end of `color`'s path. */
-  private beginDrag(color: number): void {
+  private beginDrag(color: number, fromStop = false): void {
     const path = this.paths[color];
     if (path.length === 0) return;
-    this.drag = { color, target: this.targetOf(color), reached: false };
+    this.drag = { color, target: this.targetOf(color), reached: false, fromStop, drew: false };
     this.renderer.setHead(path[path.length - 1]);
     this.renderer.setBoard(this.owners, this.paths);
   }
@@ -263,6 +282,7 @@ export class LevelSession {
 
     path.push(square);
     this.owners[square] = color;
+    drag.drew = true;
     if (square === drag.target) drag.reached = true;
 
     this.renderer.setHead(square);
