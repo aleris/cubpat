@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Generated artwork: the real starting position of level 4
+       (size 3, 3 colours, master seed 12345), drawn with the
+       same isometric projection as the level-screen mini cube. Dots are the
+       empty squares; the coloured tiles are that level's endpoint pairs, so no
+       two tiles of one colour touch. Regenerate by rendering that level's
+       initial state; do not hand-edit the tile coordinates. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="0" r="95%">
+      <stop offset="0" stop-color="#1b2233" />
+      <stop offset="1" stop-color="#07080c" />
+    </radialGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55" />
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)" />
+
+  <g filter="url(#shadow)">
+    <g fill="#05060a">
+      <polygon points="175.46 302.50 256.00 349.00 256.00 256.00 175.46 209.50" />
+      <polygon points="256.00 349.00 336.54 302.50 336.54 209.50 256.00 256.00" />
+      <polygon points="175.46 209.50 256.00 256.00 336.54 209.50 256.00 163.00" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 175.46 302.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 202.31 318.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 229.15 333.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 175.46 271.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 202.31 287.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#aa1fea" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 229.15 302.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 175.46 240.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 202.31 256.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 0.000 -31.000 229.15 271.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 256.00 349.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 282.85 333.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 309.69 318.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 256.00 318.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 282.85 302.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 309.69 287.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#ed4d3b" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 256.00 287.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#60f099" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 282.85 271.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 -15.500 0.000 -31.000 309.69 256.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 175.46 209.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 202.31 225.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 229.15 240.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#ed4d3b" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 202.31 194.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#aa1fea" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 229.15 209.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 256.00 225.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 229.15 178.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#60f099" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 256.00 194.00)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+    <g transform="matrix(26.847 15.500 26.847 -15.500 282.85 209.50)">
+      <rect x="0.06" y="0.06" width="0.88" height="0.88" rx="0.19" fill="#1d222e" />
+    </g>
+  </g>
+
+  <polygon points="175.46 209.50 229.15 178.50 256.00 163.00 309.69 194.00 336.54 209.50 336.54 302.50 282.85 333.50 256.00 349.00 229.15 333.50 202.31 318.00 175.46 302.50" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="3" stroke-linejoin="round" />
+</svg>

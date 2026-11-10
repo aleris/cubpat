@@ -8,6 +8,14 @@
     />
     <meta name="theme-color" content="#07080c" />
     <meta name="description" content="Link matching colours across a Rubik-style cube." />
+    <!-- Home-screen install: launches without browser chrome. iOS ignores the
+         manifest display mode and needs the apple-* metas instead. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cubpat" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
     <title>Cubpat — colour paths on a cube</title>
     <!-- Critical styles: inline so the first paint is already dark and only shows the loader,
          before the bundle (and styles.css) has loaded. -->

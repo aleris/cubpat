@@ -17,6 +17,24 @@ pnpm preview       # serve dist/
 pnpm test          # Vitest unit suite (no browser needed)
 ```
 
+## Install on a phone
+
+The build is a home-screen web app. `public/manifest.webmanifest` plus the
+`apple-mobile-web-app-*` metas in `index.html` make it launch without browser
+chrome; `public/icons/` holds the 192/512/maskable PNGs and the 180 px Apple
+touch icon.
+
+- **iOS**: Safari → Share → Add to Home Screen. Only a home-screen launch runs
+  without chrome — iOS has no fullscreen API for web pages, and it ignores the
+  manifest's `display`, so the apple metas are what matter. `black-translucent`
+  draws the page under the status bar; the HUD and screens already offset by
+  `env(safe-area-inset-top)`.
+- **Android / desktop Chrome**: the manifest supplies `display: "standalone"`,
+  `start_url`, theme colours and icons for the install prompt.
+- The icon artwork is `public/icons/icon.svg`; `icon-maskable.svg` is the same
+  cube scaled to fit the 80% maskable safe zone. Re-rasterise them to 192 and
+  512 px (plus 180 px for Apple) when changing the artwork.
+
 ## Rules
 
 - **Link a pair.** Press a coloured square and drag to adjacent squares; each

@@ -534,8 +534,12 @@ export class CubeRenderer {
   private screenRay(clientX: number, clientY: number): boolean {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
-    const px = ((clientX - rect.left) / rect.width) * this.canvas.width;
-    const py = ((clientY - rect.top) / rect.height) * this.canvas.height;
+    // CameraComponent.screenToWorld measures points in CSS pixels (it divides
+    // by device.clientRect, not the drawing buffer), so this must not scale by
+    // canvas.width/height: that factor is the pixel ratio on retina screens and
+    // would offset every pick by the same amount.
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
     const cam = this.camera.camera!;
     cam.screenToWorld(px, py, cam.nearClip, this.tmpA);
     cam.screenToWorld(px, py, cam.farClip, this.tmpB);
