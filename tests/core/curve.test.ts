@@ -31,7 +31,7 @@ describe("level curve", () => {
     expect(LEVEL_CONFIGS[LEVEL_COUNT - 1]).toEqual({
       index: LEVEL_COUNT - 1,
       size: 6,
-      colors: 10,
+      colors: 13,
       variant: "edge"
     });
   });
@@ -62,7 +62,7 @@ describe("level curve", () => {
       expect(config.size).toBeGreaterThanOrEqual(2);
       expect(config.size).toBeLessThanOrEqual(6);
       expect(config.colors).toBeGreaterThanOrEqual(2);
-      expect(config.colors).toBeLessThanOrEqual(10);
+      expect(config.colors).toBeLessThanOrEqual(13);
       expect(config.colors * 4).toBeLessThanOrEqual(3 * config.size ** 2);
     }
   });

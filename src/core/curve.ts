@@ -45,21 +45,21 @@ const CURVE_SPANS: readonly CurveSpan[] = [
   { levels: 2, size: 2, colors: 2 },
   { levels: 3, size: 3, colors: 3 },
   { levels: 5, size: 3, colors: 4 },
-  { levels: 5, size: 4, colors: 4 },
   { levels: 5, size: 4, colors: 5 },
-  { levels: 5, size: 4, colors: 5 },
-  // Zone 2
   { levels: 5, size: 4, colors: 6 },
-  { levels: 5, size: 5, colors: 6 },
-  { levels: 5, size: 5, colors: 6 },
-  { levels: 5, size: 5, colors: 7 },
-  { levels: 5, size: 5, colors: 7 },
-  // Zone 3
+  { levels: 5, size: 4, colors: 7 },
+  // Zone 2
+  { levels: 5, size: 4, colors: 8 },
   { levels: 5, size: 5, colors: 8 },
-  { levels: 5, size: 6, colors: 8 },
-  { levels: 5, size: 6, colors: 9 },
-  { levels: 5, size: 6, colors: 9 },
-  { levels: 5, size: 6, colors: 10 }
+  { levels: 5, size: 5, colors: 9 },
+  { levels: 5, size: 5, colors: 9 },
+  { levels: 5, size: 5, colors: 9 },
+  // Zone 3
+  { levels: 5, size: 5, colors: 10 },
+  { levels: 5, size: 6, colors: 10 },
+  { levels: 5, size: 6, colors: 11 },
+  { levels: 5, size: 6, colors: 12 },
+  { levels: 5, size: 6, colors: 13 }
 ];
 
 const CURVE: ReadonlyArray<readonly [number, number]> = CURVE_SPANS.flatMap(
