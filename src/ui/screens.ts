@@ -2,7 +2,7 @@ import { LEVEL_COUNT, LEVEL_CONFIGS, LEVELS_PER_ZONE, ZONES } from "../core/curv
 import { generateLevel, type Level } from "../core/level.ts";
 import { isUnlocked, type SaveData } from "../state/progress.ts";
 import { renderColorTiles } from "./color-tiles.ts";
-import { renderMini } from "./mini-cube.ts";
+import { renderMini, renderMiniBare } from "./mini-cube.ts";
 
 export interface ScreenHooks {
   onPlay: (levelIndex: number) => void;
@@ -39,8 +39,9 @@ export class Screens {
   private readonly toastEl: HTMLElement;
   private readonly introEl: HTMLButtonElement;
   private readonly introNum: HTMLElement;
-  private readonly introMax: HTMLElement;
+  private readonly introArea: HTMLElement;
   private readonly introSize: HTMLElement;
+  private readonly introCube: HTMLElement;
   private readonly introColors: HTMLElement;
 
   private readonly cache = new Map<number, Level>();
@@ -79,8 +80,9 @@ export class Screens {
     this.toastEl = query("#toast");
     this.introEl = query<HTMLButtonElement>("#intro-screen");
     this.introNum = query("#intro-level-num");
-    this.introMax = query("#intro-level-max");
+    this.introArea = query("#intro-area");
     this.introSize = query("#intro-size");
+    this.introCube = query("#intro-cube");
     this.introColors = query("#intro-colors");
 
     const underline = document.createElement("span");
@@ -139,6 +141,11 @@ export class Screens {
 
   get area(): number {
     return this.activeZone;
+  }
+
+  /** True while the level intro is up and still waiting to start a level. */
+  get introOpen(): boolean {
+    return this.introResolve !== null;
   }
 
   refresh(save: SaveData, keepZone = false): void {
@@ -227,20 +234,23 @@ export class Screens {
   }
 
   /**
-   * Level intro: the level number, cube size and colour tiles on the page
-   * background, with the menu as the only HUD control. Resolves true when the
-   * player starts the level; false when the screen is cancelled (routed away).
+   * Level intro: the area name, level number, cube size and colour tiles on
+   * the page background, with the menu as the only HUD control. Resolves true
+   * when the player starts the level; false when the screen is cancelled
+   * (routed away).
    */
   showIntro(level: Level): Promise<boolean> {
     this.cancelIntro();
     this.clearToast();
     this.hideSolved();
-    this.activeZone = Math.max(this.activeZone, Math.floor(level.index / LEVELS_PER_ZONE));
+    const zone = Math.floor(level.index / LEVELS_PER_ZONE);
+    this.activeZone = Math.max(this.activeZone, zone);
     this.levelScreen.classList.add("is-hidden");
 
-    this.introNum.textContent = String((level.index % LEVELS_PER_ZONE) + 1);
-    this.introMax.textContent = `/ ${LEVELS_PER_ZONE}`;
+    this.introArea.textContent = ZONES[zone].name;
+    this.introNum.textContent = String(level.index + 1);
     this.introSize.textContent = `${level.size}×${level.size}`;
+    this.introCube.replaceChildren(renderMiniBare(level));
     this.introColors.replaceChildren(renderColorTiles(level));
     this.introEl.setAttribute("aria-label", `Start level ${level.index + 1}`);
 

@@ -14,14 +14,37 @@ const MINI_CORNER = 0.22;
 const ARC_K = 0.5523;
 const MINI_BODY = "#05060a";
 const MINI_EMPTY = "#1d222e";
+/** The board's own body and empty-tile greys, for the intro's bare cube. */
+const BARE_BODY = "#1c2130";
+const BARE_TILE = "#313748";
+
+/** Tile colour for one square of a mini cube: face slot and index within it. */
+type TileColor = (slot: number, index: number) => string;
 
 export function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
   const n = level.size;
   const colors = solved ? solvedColors(level) : level.initial;
+  return drawMini(level, "mini", (slot, i) => {
+    const color = colors[slot * n * n + i];
+    return color >= 0 ? level.palette[color] : MINI_EMPTY;
+  });
+}
+
+/** Every tile grey: the level intro's board-size preview. */
+export function renderMiniBare(level: Level): HTMLCanvasElement {
+  return drawMini(level, "mini-bare", () => BARE_TILE, BARE_BODY);
+}
+
+function drawMini(
+  level: Level,
+  className: string,
+  colorAt: TileColor,
+  body = MINI_BODY
+): HTMLCanvasElement {
   const quads = miniQuads(level);
 
   const canvas = document.createElement("canvas");
-  canvas.className = "mini";
+  canvas.className = className;
   canvas.width = MINI_RES;
   canvas.height = MINI_RES;
   const ctx = canvas.getContext("2d");
@@ -82,7 +105,7 @@ export function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
     ctx.closePath();
   };
 
-  ctx.fillStyle = MINI_BODY;
+  ctx.fillStyle = body;
   for (const face of quads) {
     for (const quad of face) {
       trace(quad, 1, 0);
@@ -92,9 +115,8 @@ export function renderMini(level: Level, solved: boolean): HTMLCanvasElement {
 
   quads.forEach((face, slot) => {
     face.forEach((quad, i) => {
-      const color = colors[slot * n * n + i];
       trace(quad, MINI_TILE, MINI_CORNER);
-      ctx.fillStyle = color >= 0 ? level.palette[color] : MINI_EMPTY;
+      ctx.fillStyle = colorAt(slot, i);
       ctx.fill();
     });
   });

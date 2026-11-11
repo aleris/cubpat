@@ -163,7 +163,7 @@ window.addEventListener("keydown", (event) => {
     session?.solveNow();
     return;
   }
-  if (event.key === "Escape" && session) navigateArea(screens.area);
+  if (event.key === "Escape" && (session || screens.introOpen)) navigateArea(screens.area);
 });
 
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());

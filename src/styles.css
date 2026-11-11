@@ -173,6 +173,20 @@ body {
   touch-action: manipulation;
 }
 
+.intro-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.intro-area {
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--muted-soft);
+}
+
 .intro-kicker {
   font-size: 12px;
   letter-spacing: 0.3em;
@@ -180,24 +194,11 @@ body {
   color: var(--muted);
 }
 
-.intro-count {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
 .intro-num {
   font-size: clamp(96px, 24vh, 200px);
   font-weight: 800;
   line-height: 0.85;
   letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-}
-
-.intro-max {
-  font-size: clamp(18px, 3.2vh, 26px);
-  font-weight: 600;
-  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -221,10 +222,57 @@ body {
   height: 20px;
 }
 
+.intro-cube {
+  display: flex;
+  align-items: center;
+  height: 26px;
+}
+
+/* The size belongs to the cube: tighter than the gap to the colour tiles. */
+.intro-dims {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .intro-colors .color-tiles {
   display: block;
   height: 20px;
   width: auto;
+}
+
+.intro-cube .mini-bare {
+  display: block;
+  height: 26px;
+  width: auto;
+}
+
+/* Pinned to the stage's bottom edge, clear of the home indicator. */
+.intro-hint {
+  position: absolute;
+  left: max(20px, env(safe-area-inset-left));
+  right: max(20px, env(safe-area-inset-right));
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Touch screens get "Tap"; anything the pointer can hover gets "Click". */
+.intro-hint-touch {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .intro-hint-pointer {
+    display: none;
+  }
+
+  .intro-hint-touch {
+    display: inline;
+  }
 }
 
 /* While the intro is up the menu button is the only HUD control. */

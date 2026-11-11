@@ -105,6 +105,15 @@ URL (`#/area/2`), so a refresh keeps both. The browser's back/forward buttons
 move between levels and area tabs. Locked, out-of-range or unknown URLs fall
 back to the level screen.
 
+Opening a level shows an intro over the page background before the cube: the
+area name above the level's global number (26 is the first Expansion level), a
+small all-grey cube followed by the cube size (`5×5`), and one small tile per
+colour, painted with the same palette colour × procedural motif as the cube. It
+fades in; any click (or Enter/Space) fades it out quickly and starts the cube,
+with a start hint pinned to the bottom ("Click" on pointer devices, "Tap" on
+touch screens), and the menu button is the only HUD control while it is up. In
+play the top-left HUD shows the same global level number.
+
 ## Level generation
 
 Levels are a pure function of `(seed, level index)`, so a saved seed replays the
@@ -158,9 +167,10 @@ src/play/
   level-session.ts       drag rules: extend, truncate, release, completion;
                          empty-space drags turn the cube
 src/ui/
-  screens.ts             area tabs, level grid (5×5 mini cubes), HUD,
-                         solved dock, toast
-  mini-cube.ts           level-screen mini cube canvas
+  screens.ts             area tabs, level grid (5×5 mini cubes), level intro,
+                         HUD, solved dock, toast
+  color-tiles.ts         level-intro colour strip (palette × tile motif)
+  mini-cube.ts           mini cube canvases: level grid and intro size preview
 src/state/
   progress.ts            localStorage save (seed + completed levels)
 tests/                   Vitest suites, mirroring src/
