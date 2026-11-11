@@ -22,6 +22,8 @@ const screens = new Screens(save.seed, {
 
 let session: LevelSession | null = null;
 let hintedThisLevel = false;
+/** Bumped per level start, so a superseded intro cannot start a level. */
+let levelToken = 0;
 
 const ready = createGameApp(canvas);
 
@@ -111,8 +113,17 @@ async function startLevel(index: number): Promise<void> {
   // The URL may have moved on while the app was still starting.
   if (routedLevel() !== index) return;
   const { app, camera } = game;
-  session?.dispose();
   const level = screens.levelFor(index);
+  const token = ++levelToken;
+
+  // The cube stays hidden behind the intro until the player starts the level.
+  // The boot loader hides every element but itself, so it must go first.
+  dismissBoot();
+  session?.dispose();
+  session = null;
+  canvas!.classList.add("is-hidden");
+  const started = await screens.showIntro(level);
+  if (!started || token !== levelToken || routedLevel() !== index) return;
 
   canvas!.classList.remove("is-hidden");
   screens.showGame(index);
@@ -131,7 +142,6 @@ async function startLevel(index: number): Promise<void> {
   if (index === 0 && !save.completed.includes(0)) {
     screens.toast("Tap or drag: fill the squares between two matching squares", 6000);
   }
-  dismissBoot();
 }
 
 function handleSolved(index: number): void {

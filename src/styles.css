@@ -141,6 +141,97 @@ body {
   outline-offset: 3px;
 }
 
+/* ------------------------------------------------------------------ level intro */
+
+/* The whole screen is the start button: any click begins the level. It sits
+   above the canvas and below the HUD, and its background is the page's own so
+   the cube stays hidden until the intro is dismissed. */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.6vh, 16px);
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding:
+    40px max(20px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  border: 0;
+  background:
+    radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
+    radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
+    #07080c;
+  color: var(--text);
+  font: inherit;
+  opacity: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.intro-kicker {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.intro-count {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.intro-num {
+  font-size: clamp(96px, 24vh, 200px);
+  font-weight: 800;
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.intro-max {
+  font-size: clamp(18px, 3.2vh, 26px);
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.intro-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: clamp(8px, 2.4vh, 28px);
+}
+
+.intro-size {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--muted-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.intro-colors {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+.intro-colors .color-tiles {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+/* While the intro is up the menu button is the only HUD control. */
+#hud.is-intro #btn-reset {
+  display: none;
+}
+
 /* ------------------------------------------------------------------ level screen */
 
 .screen {
@@ -249,24 +340,8 @@ body {
 }
 
 .zone-tab-label {
-  display: inline-flex;
-  align-items: center;
-  gap: clamp(4px, 1vw, 7px);
   padding-bottom: 7px;
   white-space: nowrap;
-}
-
-.zone-tab-icon {
-  display: inline-flex;
-  flex: none;
-  width: clamp(10px, 2.6vw, 13px);
-  height: clamp(10px, 2.6vw, 13px);
-}
-
-.zone-tab-icon svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* Progress of the selected area, sitting directly under its tab. */
@@ -305,14 +380,6 @@ body {
 
 .zone-tab[aria-selected="true"] .zone-tab-sub {
   color: var(--muted-strong);
-}
-
-.zone-tab[data-state="todo"] .zone-tab-icon {
-  color: var(--muted);
-}
-
-.zone-tab[data-state="done"] .zone-tab-icon {
-  color: #7fe3a5;
 }
 
 .zone-tab:disabled {

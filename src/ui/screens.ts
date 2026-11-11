@@ -1,6 +1,7 @@
 import { LEVEL_COUNT, LEVEL_CONFIGS, LEVELS_PER_ZONE, ZONES } from "../core/curve.ts";
 import { generateLevel, type Level } from "../core/level.ts";
 import { isUnlocked, type SaveData } from "../state/progress.ts";
+import { renderColorTiles } from "./color-tiles.ts";
 import { renderMini } from "./mini-cube.ts";
 
 export interface ScreenHooks {
@@ -15,25 +16,9 @@ export interface ScreenHooks {
 /** Mirrors `repeat(5, …)` in `.level-grid` in styles.css. */
 const GRID_COLUMNS = 5;
 
-type TabState = "done" | "todo" | "locked";
-
-/** 16px line icons: a tick for a finished area, an open ring for a pending one. */
-const TAB_ICONS: Record<TabState, string> = {
-  done:
-    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
-    '<circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.4"/>' +
-    '<path d="M5.1 8.3 7 10.2l3.9-4" stroke="currentColor" stroke-width="1.6" ' +
-    'stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  todo:
-    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
-    '<circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.4" ' +
-    'stroke-dasharray="2.4 2.6"/></svg>',
-  locked:
-    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
-    '<rect x="3.4" y="7" width="9.2" height="6.6" rx="1.6" stroke="currentColor" stroke-width="1.4"/>' +
-    '<path d="M5.6 7V5.4a2.4 2.4 0 0 1 4.8 0V7" stroke="currentColor" stroke-width="1.4" ' +
-    'stroke-linecap="round"/></svg>'
-};
+/** Level intro timings: a slow reveal, then a quick hand-off to the cube. */
+const INTRO_IN_MS = 520;
+const INTRO_OUT_MS = 180;
 
 export class Screens {
   private readonly hooks: ScreenHooks;
@@ -52,6 +37,11 @@ export class Screens {
   private readonly nextButton: HTMLButtonElement;
   private readonly menuButton: HTMLButtonElement;
   private readonly toastEl: HTMLElement;
+  private readonly introEl: HTMLButtonElement;
+  private readonly introNum: HTMLElement;
+  private readonly introMax: HTMLElement;
+  private readonly introSize: HTMLElement;
+  private readonly introColors: HTMLElement;
 
   private readonly cache = new Map<number, Level>();
   private readonly cells: HTMLElement[] = [];
@@ -63,6 +53,10 @@ export class Screens {
   private transitionTimer = 0;
   private celebrateTimer = 0;
   private unlockTimer = 0;
+  private introAnimation: Animation | null = null;
+  private introTimer = 0;
+  /** Set while the intro is up; resolved once it is started or cancelled. */
+  private introResolve: ((started: boolean) => void) | null = null;
   private tabStop = 0;
   private activeZone = 0;
   /** New area to celebrate on the next Next press, or -1 for a normal next level. */
@@ -83,6 +77,11 @@ export class Screens {
     this.nextButton = query<HTMLButtonElement>("#btn-next");
     this.menuButton = query<HTMLButtonElement>("#btn-menu");
     this.toastEl = query("#toast");
+    this.introEl = query<HTMLButtonElement>("#intro-screen");
+    this.introNum = query("#intro-level-num");
+    this.introMax = query("#intro-level-max");
+    this.introSize = query("#intro-size");
+    this.introColors = query("#intro-colors");
 
     const underline = document.createElement("span");
     underline.className = "zone-underline";
@@ -98,6 +97,10 @@ export class Screens {
 
     query("#btn-reset").addEventListener("click", () => this.hooks.onReset());
     this.menuButton.addEventListener("click", () => this.hooks.onMenu());
+    this.introEl.addEventListener("pointerdown", this.onIntroStart);
+    this.introEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") this.onIntroStart();
+    });
     this.nextButton.addEventListener("click", () => {
       if (this.nextArea >= 0) {
         const area = this.nextArea;
@@ -180,6 +183,7 @@ export class Screens {
   }
 
   showLevels(save: SaveData, area?: number, celebrate = false): void {
+    this.cancelIntro();
     this.clearToast();
     const fromGame = this.levelScreen.classList.contains("is-hidden");
 
@@ -220,6 +224,75 @@ export class Screens {
     this.hudLevelNum.textContent = String(levelIndex + 1);
     this.hudLevel.classList.remove("is-hidden");
     this.hideSolved();
+  }
+
+  /**
+   * Level intro: the level number, cube size and colour tiles on the page
+   * background, with the menu as the only HUD control. Resolves true when the
+   * player starts the level; false when the screen is cancelled (routed away).
+   */
+  showIntro(level: Level): Promise<boolean> {
+    this.cancelIntro();
+    this.clearToast();
+    this.hideSolved();
+    this.activeZone = Math.max(this.activeZone, Math.floor(level.index / LEVELS_PER_ZONE));
+    this.levelScreen.classList.add("is-hidden");
+
+    this.introNum.textContent = String((level.index % LEVELS_PER_ZONE) + 1);
+    this.introMax.textContent = `/ ${LEVELS_PER_ZONE}`;
+    this.introSize.textContent = `${level.size}×${level.size}`;
+    this.introColors.replaceChildren(renderColorTiles(level));
+    this.introEl.setAttribute("aria-label", `Start level ${level.index + 1}`);
+
+    this.hud.classList.remove("is-hidden");
+    this.hud.classList.add("is-intro");
+    this.hudLevel.classList.add("is-hidden");
+
+    this.introEl.classList.remove("is-hidden");
+    this.fadeIntro(0, 1, INTRO_IN_MS, "cubic-bezier(0.22, 0.61, 0.36, 1)");
+    return new Promise<boolean>((resolve) => {
+      this.introResolve = resolve;
+    });
+  }
+
+  /** Any press starts the level: fade the intro out under the arriving cube. */
+  private readonly onIntroStart = (): void => {
+    const resolve = this.introResolve;
+    if (!resolve) return;
+    this.introResolve = null;
+    const from = Number.parseFloat(getComputedStyle(this.introEl).opacity) || 0;
+    this.fadeIntro(from, 0, INTRO_OUT_MS, "ease-in");
+    window.clearTimeout(this.introTimer);
+    this.introTimer = window.setTimeout(() => {
+      this.introTimer = 0;
+      this.introEl.classList.add("is-hidden");
+      this.introAnimation?.cancel();
+      this.introAnimation = null;
+      this.hud.classList.remove("is-intro");
+    }, INTRO_OUT_MS + 20);
+    resolve(true);
+  };
+
+  /** Drop the intro without starting a level, e.g. after a popstate. */
+  private cancelIntro(): void {
+    window.clearTimeout(this.introTimer);
+    this.introTimer = 0;
+    this.introAnimation?.cancel();
+    this.introAnimation = null;
+    this.introEl.classList.add("is-hidden");
+    this.hud.classList.remove("is-intro");
+    const resolve = this.introResolve;
+    this.introResolve = null;
+    resolve?.(false);
+  }
+
+  private fadeIntro(from: number, to: number, duration: number, easing: string): void {
+    this.introAnimation?.cancel();
+    this.introAnimation = this.introEl.animate([{ opacity: from }, { opacity: to }], {
+      duration,
+      easing,
+      fill: "both"
+    });
   }
 
   /** Show the solved next-level button. `nextIndex` < 0 means there is no next level. */
@@ -301,15 +374,10 @@ export class Screens {
 
       const label = document.createElement("span");
       label.className = "zone-tab-label";
-      const icon = document.createElement("span");
-      icon.className = "zone-tab-icon";
-      icon.dataset.state = "locked";
-      icon.setAttribute("aria-hidden", "true");
-      icon.innerHTML = TAB_ICONS.locked;
       const name = document.createElement("span");
       name.className = "zone-tab-name";
       name.textContent = zone.name;
-      label.append(icon, name);
+      label.append(name);
 
       const sub = document.createElement("span");
       sub.className = "zone-tab-sub";
@@ -411,22 +479,15 @@ export class Screens {
         tab.classList.add("is-revealing");
       }
       const active = index === this.activeZone;
-      const state: TabState = this.zoneDone(save, index) ? "done" : reached ? "todo" : "locked";
+      const done = this.zoneDone(save, index);
       tab.disabled = !reached;
-      tab.dataset.state = state;
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
-      tab.title =
-        state === "done"
-          ? `${zone.name}: area complete`
-          : reached
-            ? `${zone.name} area`
-            : "Complete the previous area to unlock";
-      const icon = tab.querySelector<HTMLElement>(".zone-tab-icon");
-      if (icon && icon.dataset.state !== state) {
-        icon.dataset.state = state;
-        icon.innerHTML = TAB_ICONS[state];
-      }
+      tab.title = done
+        ? `${zone.name}: area complete`
+        : reached
+          ? `${zone.name} area`
+          : "Complete the previous area to unlock";
     });
     this.grid.setAttribute("aria-labelledby", this.tabs[this.activeZone].id);
   }
