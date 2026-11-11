@@ -64,7 +64,7 @@ const ICON_SIZE = 0.62;
 /** Length of the level-start flight, in seconds. */
 const INTRO_DURATION = 1.5;
 /** How far behind its rest position the cube starts, along the view direction. */
-const INTRO_DISTANCE = 20;
+const INTRO_DISTANCE = 40;
 /** Full turns the cube spins on its way in. */
 const INTRO_TURNS = 1.25;
 /** Tumble axis of the flight, tilted off the vertical so the spin reads in 3D. */
