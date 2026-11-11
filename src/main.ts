@@ -116,7 +116,7 @@ async function startLevel(index: number): Promise<void> {
   const level = screens.levelFor(index);
   const token = ++levelToken;
 
-  // The cube stays hidden behind the intro until the player starts the level.
+  // The cube stays hidden until the intro has finished fading out.
   // The boot loader hides every element but itself, so it must go first.
   dismissBoot();
   session?.dispose();

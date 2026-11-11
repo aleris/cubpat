@@ -247,37 +247,14 @@ body {
   width: auto;
 }
 
-/* Pinned to the stage's bottom edge, clear of the home indicator. */
-.intro-hint {
-  position: absolute;
-  left: max(20px, env(safe-area-inset-left));
-  right: max(20px, env(safe-area-inset-right));
-  bottom: calc(30px + env(safe-area-inset-bottom));
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-align: center;
-  color: var(--muted);
-}
-
-/* Touch screens get "Tap"; anything the pointer can hover gets "Click". */
-.intro-hint-touch {
-  display: none;
-}
-
-@media (hover: none) and (pointer: coarse) {
-  .intro-hint-pointer {
-    display: none;
-  }
-
-  .intro-hint-touch {
-    display: inline;
-  }
-}
-
 /* While the intro is up the menu button is the only HUD control. */
 #hud.is-intro #btn-reset {
   display: none;
+}
+
+/* The long fade-out must not swallow presses aimed at the cube behind it. */
+.intro.is-leaving {
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------------ level screen */

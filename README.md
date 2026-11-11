@@ -109,10 +109,10 @@ Opening a level shows an intro over the page background before the cube: the
 area name above the level's global number (26 is the first Expansion level), a
 small all-grey cube followed by the cube size (`5×5`), and one small tile per
 colour, painted with the same palette colour × procedural motif as the cube. It
-fades in; any click (or Enter/Space) fades it out quickly and starts the cube,
-with a start hint pinned to the bottom ("Click" on pointer devices, "Tap" on
-touch screens), and the menu button is the only HUD control while it is up. In
-play the top-left HUD shows the same global level number.
+fades in over ~0.9 s, then hands over on its own after 2 s; any click (or
+Enter/Space) starts it early. The intro fades out over ~0.7 s and the cube view
+appears once it is gone. The menu button is the only HUD control while the
+intro is up. In play the top-left HUD shows the same global level number.
 
 ## Level generation
 

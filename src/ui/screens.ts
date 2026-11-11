@@ -16,9 +16,11 @@ export interface ScreenHooks {
 /** Mirrors `repeat(5, …)` in `.level-grid` in styles.css. */
 const GRID_COLUMNS = 5;
 
-/** Level intro timings: a slow reveal, then a quick hand-off to the cube. */
-const INTRO_IN_MS = 520;
-const INTRO_OUT_MS = 180;
+/** Level intro timings: a noticeable reveal, then a long fade-out under the cube. */
+const INTRO_IN_MS = 900;
+const INTRO_OUT_MS = 700;
+/** The intro starts the level on its own after this delay; a press starts it at once. */
+const INTRO_AUTO_MS = 1500;
 
 export class Screens {
   private readonly hooks: ScreenHooks;
@@ -56,8 +58,12 @@ export class Screens {
   private unlockTimer = 0;
   private introAnimation: Animation | null = null;
   private introTimer = 0;
+  /** Auto-start timer armed while the intro waits for a press. */
+  private introAutoTimer = 0;
   /** Set while the intro is up; resolved once it is started or cancelled. */
   private introResolve: ((started: boolean) => void) | null = null;
+  /** True once the hand-off started, so a second press during the fade-out is ignored. */
+  private introStarted = false;
   private tabStop = 0;
   private activeZone = 0;
   /** New area to celebrate on the next Next press, or -1 for a normal next level. */
@@ -236,8 +242,8 @@ export class Screens {
   /**
    * Level intro: the area name, level number, cube size and colour tiles on
    * the page background, with the menu as the only HUD control. Resolves true
-   * when the player starts the level; false when the screen is cancelled
-   * (routed away).
+   * after the intro has faded out, from a press or the auto-start timer; false
+   * when the screen is cancelled (routed away).
    */
   showIntro(level: Level): Promise<boolean> {
     this.cancelIntro();
@@ -259,38 +265,55 @@ export class Screens {
     this.hudLevel.classList.add("is-hidden");
 
     this.introEl.classList.remove("is-hidden");
-    this.fadeIntro(0, 1, INTRO_IN_MS, "cubic-bezier(0.22, 0.61, 0.36, 1)");
+    this.introEl.classList.remove("is-leaving");
+    this.fadeIntro(0, 1, INTRO_IN_MS, "ease-in-out");
     return new Promise<boolean>((resolve) => {
       this.introResolve = resolve;
+      this.introAutoTimer = window.setTimeout(() => {
+        this.introAutoTimer = 0;
+        this.onIntroStart();
+      }, INTRO_AUTO_MS);
     });
   }
 
-  /** Any press starts the level: fade the intro out under the arriving cube. */
+  /**
+   * Any press starts the level: fade the intro out first, and only resolve once
+   * it is gone, so the cube view appears after the overlay has finished.
+   */
   private readonly onIntroStart = (): void => {
     const resolve = this.introResolve;
-    if (!resolve) return;
-    this.introResolve = null;
+    if (!resolve || this.introStarted) return;
+    this.introStarted = true;
+    window.clearTimeout(this.introAutoTimer);
+    this.introAutoTimer = 0;
     const from = Number.parseFloat(getComputedStyle(this.introEl).opacity) || 0;
-    this.fadeIntro(from, 0, INTRO_OUT_MS, "ease-in");
+    this.introEl.classList.add("is-leaving");
+    this.fadeIntro(from, 0, INTRO_OUT_MS, "ease-out");
     window.clearTimeout(this.introTimer);
     this.introTimer = window.setTimeout(() => {
       this.introTimer = 0;
       this.introEl.classList.add("is-hidden");
+      this.introEl.classList.remove("is-leaving");
       this.introAnimation?.cancel();
       this.introAnimation = null;
       this.hud.classList.remove("is-intro");
+      this.introResolve = null;
+      resolve(true);
     }, INTRO_OUT_MS + 20);
-    resolve(true);
   };
 
   /** Drop the intro without starting a level, e.g. after a popstate. */
   private cancelIntro(): void {
     window.clearTimeout(this.introTimer);
     this.introTimer = 0;
+    window.clearTimeout(this.introAutoTimer);
+    this.introAutoTimer = 0;
     this.introAnimation?.cancel();
     this.introAnimation = null;
     this.introEl.classList.add("is-hidden");
+    this.introEl.classList.remove("is-leaving");
     this.hud.classList.remove("is-intro");
+    this.introStarted = false;
     const resolve = this.introResolve;
     this.introResolve = null;
     resolve?.(false);
