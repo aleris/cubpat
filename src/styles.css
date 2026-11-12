@@ -7,7 +7,13 @@
   --panel: rgba(255, 255, 255, 0.055);
   --panel-strong: rgba(255, 255, 255, 0.1);
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  /* Page background and colour-scheme live in the inline <style> in index.html (first paint). */
+  /* Page background. The inline <style> in index.html repeats it literally,
+     because it has to paint before this file loads; keep the two in sync. */
+  --page-bg:
+    radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
+    radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
+    #07080c;
+  /* Colour-scheme lives in the inline <style> too (first paint). */
   /* HUD side margin: at least 16px, and wide enough to keep the HUD within 960px. */
   --hud-gutter: max(16px, calc((100vw - 960px) / 2));
 }
@@ -48,6 +54,27 @@ body {
   -webkit-tap-highlight-color: transparent;
   /* A long press on a tile or a button must not raise the iOS callout menu. */
   -webkit-touch-callout: none;
+}
+
+/* The background is painted on its own fixed layer instead of the root box.
+   iOS enlarges the visual viewport past the layout viewport whenever its
+   browser bars collapse, and a background image painted on the root box tiles
+   into that gap: a second copy of the gradient showed as a band along the
+   bottom edge. The largest viewport height covers every bar state, the layer is
+   out of flow so it adds no scroll height, and without `lvh` the `vh` fallback
+   plus `no-repeat` leaves a flat strip instead of a bright repeat. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100lvh;
+  z-index: -1;
+  background: var(--page-bg);
+  background-repeat: no-repeat;
+  pointer-events: none;
 }
 
 #scene {
@@ -159,13 +186,10 @@ body {
   height: 100%;
   margin: 0;
   padding:
-    40px max(20px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
-    max(20px, env(safe-area-inset-left));
+    calc(40px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right))
+    calc(28px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   border: 0;
-  background:
-    radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
-    radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
-    #07080c;
+  background: var(--page-bg);
   color: var(--text);
   font: inherit;
   opacity: 0;
@@ -268,10 +292,13 @@ body {
   align-items: center;
   justify-content: center;
   gap: clamp(22px, 4vh, 40px);
-  /* Clear the notch and the home indicator in landscape and fullscreen. */
+  /* Clear the notch and the home indicator in landscape and fullscreen. The
+     top inset is added to the design padding rather than maxed with it: on a
+     fullscreen iPhone the island is taller than the padding, and a bare 40px
+     put the title underneath it. */
   padding:
-    40px max(20px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
-    max(20px, env(safe-area-inset-left));
+    calc(40px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right))
+    calc(28px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 
 .screen-head {
@@ -707,8 +734,8 @@ body {
   .screen {
     gap: 10px;
     padding:
-      14px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom))
-      max(16px, env(safe-area-inset-left));
+      calc(14px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right))
+      calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
 
   .screen-head h1 {

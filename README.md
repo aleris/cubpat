@@ -27,8 +27,14 @@ touch icon.
 - **iOS**: Safari → Share → Add to Home Screen. Only a home-screen launch runs
   without chrome — iOS has no fullscreen API for web pages, and it ignores the
   manifest's `display`, so the apple metas are what matter. `black-translucent`
-  draws the page under the status bar; the HUD and screens already offset by
-  `env(safe-area-inset-top)`.
+  draws the page under the status bar and the home indicator; the HUD, the
+  level menu and the level intro all add `env(safe-area-inset-top)` to their
+  design padding, so the title clears the island instead of sliding under it.
+- The page background is painted on a fixed `body::before` layer rather than on
+  the root box. iOS enlarges its visual viewport past the layout viewport when
+  the browser bars collapse, and a background image on the root box tiles into
+  that gap — a second copy of the gradient showed as a band along the bottom
+  edge. The layer spans `100lvh`, so no seam can land inside the screen.
 - **Android / desktop Chrome**: the manifest supplies `display: "standalone"`,
   `start_url`, theme colours and icons for the install prompt.
 - The icon artwork is `public/icons/icon.svg`; `icon-maskable.svg` is the same
