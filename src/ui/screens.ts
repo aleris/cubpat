@@ -13,6 +13,12 @@ export interface ScreenHooks {
   onMenu: () => void;
 }
 
+/**
+ * How loud a toast is. `info` is the plain grey bar; `warning` (amber) and
+ * `error` (red) tint it, and by default pulse so the message is hard to miss.
+ */
+export type ToastTone = "info" | "warning" | "error";
+
 /** Mirrors `repeat(5, …)` in `.level-grid` in styles.css. */
 const GRID_COLUMNS = 5;
 
@@ -356,10 +362,15 @@ export class Screens {
    * `duration` is a floor, not a deadline: the toast stays up while the player
    * is idle, so an important hint is still on screen when they look back. It
    * goes away on the first player input after that floor has elapsed.
+   *
+   * `pulse` animates a toned toast; turn it off for a message the player
+   * cannot act on, where a pulse would only nag.
    */
-  toast(message: string, duration = 2600): void {
+  toast(message: string, duration = 2600, tone: ToastTone = "info", pulse = tone !== "info"): void {
     this.unlistenToast();
     this.toastEl.textContent = message;
+    this.toastEl.dataset.tone = tone;
+    this.toastEl.toggleAttribute("data-pulse", pulse);
     this.toastEl.classList.add("show");
     this.toastDismissable = false;
     // Capture, so the input counts even when the level's own canvas handler

@@ -17,8 +17,11 @@ export interface SessionCallbacks {
   onSolved: () => void;
   /** Every pair is linked but grey squares are left over. */
   onAllLinked: () => void;
-  /** A tap that could not be played; the text says what to do instead. */
-  onHint: (message: string) => void;
+  /**
+   * A tap that could not be played; the text says what to do instead.
+   * `warning` marks a tap that looked like a move but was refused.
+   */
+  onHint: (message: string, tone?: "info" | "warning") => void;
 }
 
 /**
@@ -218,7 +221,7 @@ export class LevelSession {
     } else if (drag.fromStop && this.complete[drag.color] && e.type === "pointerup") {
       // A tap on a linked path's last square leaves it as is; dragging back from
       // there truncates and clears `complete`, so only a plain tap gets the hint.
-      this.callbacks.onHint("This path is linked — tap its start square to reset it");
+      this.callbacks.onHint("This path is linked — tap its start square to reset it", "warning");
     } else if (drag.drew && !this.complete[drag.color] && !this.unfinishedHinted) {
       // Releasing short of the pair's second square keeps the path as drawn;
       // say so once, so the player knows the path can be picked up again.
@@ -360,22 +363,26 @@ export class LevelSession {
     }
     if (candidate >= 0) return this.growInto(candidate, square);
 
-    this.callbacks.onHint(this.emptyHint(square));
+    this.showEmptyHint(square);
     return false;
   }
 
-  /** Instruction for a tap on a grey square that no path can grow into. */
-  private emptyHint(square: number): string {
-    if (this.activeColor < 0) return "Tap a coloured square first, then a square next to it";
+  /** Explain a tap on a grey square that no path can grow into. */
+  private showEmptyHint(square: number): void {
+    if (this.activeColor < 0) {
+      this.callbacks.onHint("Tap a coloured square first, then a square next to it");
+      return;
+    }
     for (let c = 0; c < this.level.colors; c++) {
       if (!this.complete[c]) continue;
       for (const pathSquare of this.paths[c]) {
         if (areAdjacent(this.level.layout, pathSquare, square)) {
-          return "That colour is already linked — tap a square next to an unfinished path";
+          this.callbacks.onHint("That colour is already linked — tap a square next to an unfinished path", "warning");
+          return;
         }
       }
     }
-    return "Tap a square next to the end of the path you are drawing";
+    this.callbacks.onHint("Tap a square next to the end of the path you are drawing");
   }
 
   /** True when `square` (grey) is the next free square of `color`'s path. */

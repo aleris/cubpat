@@ -134,9 +134,9 @@ async function startLevel(index: number): Promise<void> {
     onAllLinked: () => {
       if (hintedThisLevel) return;
       hintedThisLevel = true;
-      screens.toast("Every square needs a colour", 3200);
+      screens.toast("Every square must be filled with a color", 3200, "error");
     },
-    onHint: (message) => screens.toast(message, 3200)
+    onHint: (message, tone) => screens.toast(message, 3200, tone)
   });
 
   if (index === 0 && !save.completed.includes(0)) {
@@ -173,5 +173,5 @@ route();
 
 void ready.catch((error: unknown) => {
   console.error(error);
-  screens.toast("This browser could not start WebGL2", 6000);
+  screens.toast("This browser could not start WebGL2", 6000, "error", false);
 });

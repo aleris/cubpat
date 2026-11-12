@@ -698,6 +698,43 @@ body::before {
   transform: translate(-50%, 0);
 }
 
+/* Toned toasts: a tinted bar whose glow pulses while it is up. The pulse runs
+   on box-shadow and `scale`, so it never fights the show/hide `transform`. */
+.toast[data-tone="warning"] {
+  --toast-glow: 255, 196, 64;
+  border-color: rgba(var(--toast-glow), 0.6);
+  background: rgba(58, 44, 12, 0.92);
+  color: #ffe6a8;
+}
+
+.toast[data-tone="error"] {
+  --toast-glow: 255, 92, 92;
+  border-color: rgba(var(--toast-glow), 0.7);
+  background: rgba(70, 18, 22, 0.92);
+  color: #ffd2d2;
+  font-weight: 600;
+}
+
+.toast.show[data-pulse] {
+  animation: toast-pulse 1.6s ease-in-out infinite;
+}
+
+.toast.show[data-pulse][data-tone="error"] {
+  animation-duration: 1.1s;
+}
+
+@keyframes toast-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--toast-glow), 0.55);
+    scale: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(var(--toast-glow), 0);
+    scale: 1.04;
+  }
+}
+
 /* Phones: a wide bar reads better than a narrow centred pill; keep a 16px
    margin on each side for the screen edge. */
 @media (max-width: 560px) {
@@ -725,6 +762,11 @@ body::before {
     animation-duration: 0.001ms !important;
     animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
+  }
+
+  /* The global rule above would loop the pulse at near-zero duration. */
+  .toast.show[data-pulse] {
+    animation: none !important;
   }
 }
 

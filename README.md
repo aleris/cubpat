@@ -94,7 +94,8 @@ touch icon.
   path reaches the square in front of it. A linked colour cannot grow any
   further; pressing one of its squares reopens it for editing.
 - **Level solved** when every pair is linked *and* every square is coloured;
-  linking the last pair with grey left over shows "Every square needs a colour".
+  linking the last pair with grey left over shows "Every square must be filled
+  with a color" as a red, pulsing toast.
 - **Reset** rebuilds the level, the **grid** button returns to the level screen.
   Solving a level reveals a wide `>>>` next-level button at the bottom centre,
   ringed by a slowly spinning rainbow border (cube stays fully visible and unblurred).
