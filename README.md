@@ -136,10 +136,16 @@ xcrun simctl shutdown booted
 - **Completion.** Reach the second square of the pair to link the colour (its
   squares light up one by one); tapping the second square does the same once the
   path reaches the square in front of it. A linked colour cannot grow any
-  further; pressing one of its squares reopens it for editing.
-- **Level solved** when every pair is linked *and* every square is coloured;
-  linking the last pair with grey left over shows "Every square must be filled
-  with a color" as a red, pulsing toast.
+  further; pressing one of its squares reopens it for editing. Because both
+  endpoint squares are pre-coloured, a path that stops on the square in front of
+  its far endpoint looks like a linked one; when the board is full that square is
+  the only one left to take, so the pair links itself.
+- **Level solved** when every pair is linked *and* every square is coloured. A
+  full board is judged on release and again every 0.4 s, so a solve cannot be
+  missed. A board that looks finished but is not gets one red, pulsing toast:
+  "Every square must be filled with a color" when grey squares are left over,
+  "All squares are filled, but a pair is still open — press that path and redraw
+  it" when every square is coloured but a pair is short of its endpoint.
 - **Reset** rebuilds the level, the **grid** button returns to the level screen.
   Solving a level reveals a wide `>>>` next-level button at the bottom centre,
   ringed by a slowly spinning rainbow border (cube stays fully visible and unblurred).

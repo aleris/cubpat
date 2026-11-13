@@ -131,10 +131,16 @@ async function startLevel(index: number): Promise<void> {
   hintedThisLevel = false;
   session = new LevelSession(app, camera, canvas!, level, {
     onSolved: () => handleSolved(index),
-    onAllLinked: () => {
+    onStuck: (reason) => {
       if (hintedThisLevel) return;
       hintedThisLevel = true;
-      screens.toast("Every square must be filled with a color", 3200, "error");
+      screens.toast(
+        reason === "unfilled"
+          ? "Every square must be filled with a color"
+          : "All squares are filled, but a pair is still open — press that path and redraw it",
+        3200,
+        "error"
+      );
     },
     onHint: (message, tone) => screens.toast(message, 3200, tone)
   });

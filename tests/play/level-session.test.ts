@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { LEVEL_CONFIGS } from "../../src/core/curve.ts";
 import { areAdjacent } from "../../src/core/layout.ts";
-import { generateLevel, type Level } from "../../src/core/level.ts";
-import { LevelSession } from "../../src/play/level-session.ts";
+import { generateLevel, solvedColors, type Level } from "../../src/core/level.ts";
+import { LevelSession, type StuckReason } from "../../src/play/level-session.ts";
 
 const rendererState = vi.hoisted(() => ({
   instance: null as null | { destroyed: boolean },
@@ -88,10 +88,26 @@ class FakeCanvas {
   }
 }
 
-function makeSession(level: Level) {
-  const callbacks = { onSolved: vi.fn(), onAllLinked: vi.fn(), onHint: vi.fn() };
+interface Harness {
+  session: LevelSession;
+  callbacks: { onSolved: () => void; onStuck: (reason: StuckReason) => void; onHint: (message: string, tone?: "info" | "warning") => void };
+  canvas: FakeCanvas;
+  press: (square: number) => void;
+  move: (square: number) => void;
+  release: () => void;
+  tick: (dt: number) => void;
+}
+
+function makeSession(level: Level): Harness {
+  const callbacks = { onSolved: vi.fn(), onStuck: vi.fn(), onHint: vi.fn() };
   const canvas = new FakeCanvas();
-  const app = { on: vi.fn(), off: vi.fn() };
+  const updates: Array<(dt: number) => void> = [];
+  const app = {
+    on: (name: string, handler: (dt: number) => void) => {
+      if (name === "update") updates.push(handler);
+    },
+    off: vi.fn()
+  };
   const session = new LevelSession(
     app as never,
     {} as never,
@@ -114,7 +130,21 @@ function makeSession(level: Level) {
   const release = (): void => {
     canvas.emit("pointerup");
   };
-  return { session, callbacks, canvas, press, move, release };
+  /** Advance the app clock, which is what drives the periodic board check. */
+  const tick = (dt: number): void => {
+    for (const handler of updates) handler(dt);
+  };
+  return { session, callbacks, canvas, press, move, release, tick };
+}
+
+/** Tap a colour's squares in order, starting from one of its endpoints. */
+function tapAlong(run: Harness, path: number[]): void {
+  run.press(path[0]);
+  run.release();
+  for (let i = 1; i < path.length; i++) {
+    run.press(path[i]);
+    run.release();
+  }
 }
 
 function isolatedGreySquare(level: Level): number {
@@ -240,6 +270,70 @@ describe("LevelSession", () => {
 
     expect(session.complete[0]).toBe(true);
     expect(callbacks.onSolved).not.toHaveBeenCalled();
+  });
+
+  it("links a pair that stopped beside its endpoint once the board fills", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const run = makeSession(level);
+
+    for (let c = 1; c < level.colors; c++) tapAlong(run, level.solution[c]);
+    // The last pair stops on the square in front of its far endpoint. That
+    // endpoint already wears the pair's colour, so the board looks finished.
+    const path = level.solution[0];
+    tapAlong(run, path.slice(0, -1));
+
+    expect(Array.from(run.session.owners).every((owner) => owner >= 0)).toBe(true);
+    expect(run.session.paths[0]).toEqual(path);
+    expect(run.session.complete.every(Boolean)).toBe(true);
+    expect(run.session.solved).toBe(true);
+    expect(run.callbacks.onSolved).toHaveBeenCalledTimes(1);
+    expect(run.callbacks.onStuck).not.toHaveBeenCalled();
+  });
+
+  it("warns when a filled board still has a pair it cannot close", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const run = makeSession(level);
+    const path = level.solution[0];
+    // A prefix whose head is nowhere near the far endpoint: another colour took
+    // the squares in between, so one tap can no longer join the pair.
+    const prefix = path.slice(0, -2);
+    expect(areAdjacent(level.layout, prefix[prefix.length - 1], level.endpoints[0][1])).toBe(false);
+
+    run.session.owners.set(solvedColors(level));
+    for (let c = 1; c < level.colors; c++) {
+      run.session.paths[c] = level.solution[c].slice();
+      run.session.complete[c] = true;
+    }
+    run.session.paths[0] = prefix.slice();
+
+    // A drag beside the cube settles the board without touching it.
+    run.canvas.emit("pointerdown", { clientX: 10, clientY: 10 });
+    run.canvas.emit("pointerup");
+
+    expect(run.session.paths[0]).toEqual(prefix);
+    expect(run.session.solved).toBe(false);
+    expect(run.callbacks.onSolved).not.toHaveBeenCalled();
+    expect(run.callbacks.onStuck).toHaveBeenCalledWith("unlinked");
+  });
+
+  it("judges a filled board on the timer without waiting for a gesture", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const run = makeSession(level);
+    const path = level.solution[0];
+
+    run.session.owners.set(solvedColors(level));
+    for (let c = 1; c < level.colors; c++) {
+      run.session.paths[c] = level.solution[c].slice();
+      run.session.complete[c] = true;
+    }
+    run.session.paths[0] = path.slice(0, -1);
+
+    run.tick(0.2);
+    expect(run.callbacks.onSolved).not.toHaveBeenCalled();
+
+    run.tick(0.3);
+    expect(run.session.paths[0]).toEqual(path);
+    expect(run.callbacks.onSolved).toHaveBeenCalledTimes(1);
   });
 
   it("explains a tap on a grey square when no path can reach it", () => {

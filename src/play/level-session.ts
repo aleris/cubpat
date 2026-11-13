@@ -3,6 +3,9 @@ import { areAdjacent } from "../core/layout.ts";
 import type { Level } from "../core/level.ts";
 import { CubeRenderer } from "../render/cube-renderer.ts";
 
+/** Seconds between board re-checks while the level is unsolved. */
+const RECHECK_INTERVAL = 0.4;
+
 interface DragState {
   color: number;
   target: number;
@@ -13,10 +16,15 @@ interface DragState {
   drew: boolean;
 }
 
+/**
+ * Why a board that looks finished is not: every pair is linked but grey squares
+ * are left over, or every square is coloured but a pair is still open.
+ */
+export type StuckReason = "unfilled" | "unlinked";
+
 export interface SessionCallbacks {
   onSolved: () => void;
-  /** Every pair is linked but grey squares are left over. */
-  onAllLinked: () => void;
+  onStuck: (reason: StuckReason) => void;
   /**
    * A tap that could not be played; the text says what to do instead.
    * `warning` marks a tap that looked like a move but was refused.
@@ -33,6 +41,9 @@ export interface SessionCallbacks {
  * on a grey square that touches the open end of a path colours it, which makes
  * the puzzle playable by tapping alone. A drag that starts beside the cube turns
  * the cube to inspect its play faces, and releasing turns it back upright.
+ *
+ * Every edit is judged on release and again on a short timer, so a filled board
+ * can never sit unsolved: see `settle`.
  */
 export class LevelSession {
   readonly level: Level;
@@ -58,6 +69,8 @@ export class LevelSession {
   private activeColor = -1;
   /** The "continue an unfinished path" hint is shown once per level. */
   private unfinishedHinted = false;
+  /** Seconds since the last periodic board check. */
+  private recheckTimer = 0;
 
   private readonly onPointerDown = (e: PointerEvent): void => this.pointerDown(e);
   private readonly onPointerMove = (e: PointerEvent): void => this.pointerMove(e);
@@ -72,7 +85,16 @@ export class LevelSession {
     if (this.looking) this.endLook();
     this.renderer.clearCursor();
   };
-  private readonly onUpdate = (dt: number): void => this.renderer.update(dt);
+  private readonly onUpdate = (dt: number): void => {
+    this.renderer.update(dt);
+    // The board only changes through a gesture, which settles on release. This
+    // timer is the belt and braces: a filled board is judged even if the final
+    // edit's release was lost, and it carries no state of its own.
+    this.recheckTimer += dt;
+    if (this.recheckTimer < RECHECK_INTERVAL) return;
+    this.recheckTimer = 0;
+    if (!this.solved) this.settle();
+  };
 
   constructor(app: pc.AppBase, camera: pc.Entity, canvas: HTMLCanvasElement, level: Level, callbacks: SessionCallbacks) {
     this.app = app;
@@ -210,12 +232,16 @@ export class LevelSession {
       // A touch has no hover: drop the lean with the finger. A mouse keeps
       // leaning while it stays over the cube.
       if (e.pointerType !== "mouse") this.renderer.clearCursor();
+      this.settle();
       return;
     }
     // A touch has no hover: drop the lean with the finger. A mouse keeps
     // leaning while it stays over the cube.
     if (e.pointerType !== "mouse") this.renderer.clearCursor();
-    if (!drag) return;
+    if (!drag) {
+      this.settle();
+      return;
+    }
     if (drag.reached) {
       this.completeColor(drag.color);
     } else if (drag.fromStop && this.complete[drag.color] && e.type === "pointerup") {
@@ -228,6 +254,7 @@ export class LevelSession {
       this.unfinishedHinted = true;
       this.callbacks.onHint("You can continue any path later from where you left it");
     }
+    this.settle();
   }
 
   /** Start turning the cube from a drag that began beside it. */
@@ -464,7 +491,6 @@ export class LevelSession {
   private completeColor(color: number): void {
     this.refreshComplete(color);
     this.renderer.setBoard(this.owners, this.paths);
-    if (!this.solved && this.isFullyLinked()) this.callbacks.onAllLinked();
     this.renderer.playPathGlow(color, this.paths[color].slice());
   }
 
@@ -478,5 +504,61 @@ export class LevelSession {
   private isFullyLinked(): boolean {
     for (let c = 0; c < this.level.colors; c++) if (!this.complete[c]) return false;
     return true;
+  }
+
+  /** Every square wears a colour. */
+  private isFilled(): boolean {
+    for (let i = 0; i < this.owners.length; i++) if (this.owners[i] < 0) return false;
+    return true;
+  }
+
+  /**
+   * Judge the board once an edit has landed: link what can only be linked,
+   * then either report the solve or say what is still missing.
+   *
+   * A pair's endpoint squares are pre-coloured, so a path that stops on the
+   * square beside its far endpoint looks exactly like a joined one — the board
+   * is full, `complete` is false, and the player has no square left to tap that
+   * shows the difference. On a full board the endpoint is the only square the
+   * path can still take, so take it instead of leaving a spent board unsolved.
+   */
+  private settle(): void {
+    if (this.disposed || this.drag || this.looking) return;
+    if (!this.solved && this.isFilled()) {
+      let closed = false;
+      for (let color = 0; color < this.level.colors; color++) {
+        closed = this.closeOpenPair(color) || closed;
+      }
+      if (closed) this.renderer.setBoard(this.owners, this.paths);
+    }
+    this.updateSolved();
+    if (!this.solved) this.reportStuck();
+  }
+
+  /** Link `color` when its path ends beside the endpoint it still has to reach. */
+  private closeOpenPair(color: number): boolean {
+    if (this.complete[color]) return false;
+    const path = this.paths[color];
+    if (path.length === 0) return false;
+    const far = this.targetOf(color);
+    if (!areAdjacent(this.level.layout, path[path.length - 1], far)) return false;
+    path.push(far);
+    this.owners[far] = color;
+    this.activeColor = color;
+    this.completeColor(color);
+    return true;
+  }
+
+  /**
+   * Explain a board that looks finished but is not: grey squares left over, or
+   * every square coloured with a pair still open. `main.ts` keeps the message to
+   * one per level, so a stuck player is told once and not nagged.
+   */
+  private reportStuck(): void {
+    if (this.isFilled()) {
+      this.callbacks.onStuck("unlinked");
+      return;
+    }
+    if (this.isFullyLinked()) this.callbacks.onStuck("unfilled");
   }
 }
