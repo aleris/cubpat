@@ -23,13 +23,11 @@
       html {
         height: 100%;
         color-scheme: dark;
-        background:
-          radial-gradient(900px 620px at 50% -12%, #1b2233 0%, rgba(7, 8, 12, 0) 62%),
-          radial-gradient(760px 700px at 50% 118%, #111726 0%, rgba(7, 8, 12, 0) 58%),
-          #07080c;
-        /* Before styles.css loads this is the only background, so it must not
-           tile into the gap iOS opens below the layout viewport. */
-        background-repeat: no-repeat;
+        /* First paint only: a flat dark page. styles.css paints the glows on a
+           fixed layer, and iOS fills the status bar strip with the background's
+           first colour stop, so a gradient here would show that strip as a band
+           before and after the stylesheet loads. */
+        background: #07080c;
       }
       body {
         margin: 0;

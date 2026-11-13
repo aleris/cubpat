@@ -30,16 +30,60 @@ touch icon.
   draws the page under the status bar and the home indicator; the HUD, the
   level menu and the level intro all add `env(safe-area-inset-top)` to their
   design padding, so the title clears the island instead of sliding under it.
-- The page background is painted on a fixed `body::before` layer rather than on
-  the root box. iOS enlarges its visual viewport past the layout viewport when
-  the browser bars collapse, and a background image on the root box tiles into
-  that gap — a second copy of the gradient showed as a band along the bottom
-  edge. The layer spans `100lvh`, so no seam can land inside the screen.
+- The page background is a single `--page-bg` in `src/styles.css`, painted on a
+  fixed `body::before` layer that spans `100lvh`. Two iOS details shape it:
+  iOS keeps the status bar as a strip outside the page and fills that strip with
+  the first colour stop of the page background, so the gradient starts and ends
+  on the base colour (`#07080c`) — a glow that reached the top edge met the
+  strip on a hard line, which read as a band in a different shade of dark. And
+  because iOS enlarges the visual viewport past the layout viewport when its
+  browser bars collapse, a background on the root box could tile into the gap;
+  the fixed layer covers every bar state.
 - **Android / desktop Chrome**: the manifest supplies `display: "standalone"`,
   `start_url`, theme colours and icons for the install prompt.
 - The icon artwork is `public/icons/icon.svg`; `icon-maskable.svg` is the same
   cube scaled to fit the 80% maskable safe zone. Re-rasterise them to 192 and
   512 px (plus 180 px for Apple) when changing the artwork.
+
+## iOS simulator
+
+No Xcode project is needed: Safari in the simulator runs the same WebKit engine
+as the phone, so it is the cheapest place to check layout, safe areas, the page
+background and WebGL. It shares the host's loopback, so a dev server bound to
+`localhost` answers as `localhost` from inside it.
+
+```bash
+# list devices, then boot one by name (a UDID works too)
+xcrun simctl list devices available
+xcrun simctl boot "iPhone 17 Pro"
+xcrun simctl bootstatus booted -b        # wait until it is actually up
+
+# dev server: a fixed port keeps the URL stable across restarts
+pnpm dev -- --port 5199 --strictPort
+
+# open a URL in the simulator's Safari
+xcrun simctl openurl booted "http://localhost:5199/"
+xcrun simctl openurl booted "http://localhost:5199/#/level/1"
+
+# screenshot the screen (402x874 pt at 3x = 1206x2622 px), then inspect it
+xcrun simctl io booted screenshot /tmp/cubpat.png
+
+# stop it when done
+xcrun simctl shutdown booted
+```
+
+- `open -a Simulator` shows the device UI and lets you tap; `openurl` and
+  `screenshot` work without it.
+- A URL that differs only in the hash does not reload the page; the app routes
+  on `popstate`. When scripting a level, add a query string so the navigation
+  is a real load: `...#/level/2` → `...?open=1#/level/2`.
+- `DEBUG_DEV_MODE_ON` in `src/state/progress.ts` is `false`, so `#/level/N`
+  falls back to the menu when level N is locked. Use level 1, or seed
+  `localStorage["cubpat.save.v1"]` from Safari's Web Inspector.
+- It does not reproduce a home-screen launch: Safari keeps a strip for the
+  status bar and reports `env(safe-area-inset-top)` as `0`, while the installed
+  app paints under the bars with the real insets. Verify anything that depends
+  on those insets on a device.
 
 ## Rules
 
