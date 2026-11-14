@@ -9,7 +9,6 @@ const RECHECK_INTERVAL = 0.4;
 interface DragState {
   color: number;
   target: number;
-  reached: boolean;
   /** Pressed on the last square of a linked path, which on its own changes nothing. */
   fromStop: boolean;
   /** The drag laid down at least one new square. */
@@ -243,7 +242,7 @@ export class LevelSession {
       this.settle();
       return;
     }
-    if (drag.reached) {
+    if (this.endsOnTarget(drag.color, drag.target)) {
       this.completeColor(drag.color);
     } else if (drag.fromStop && this.complete[drag.color] && e.type === "pointerup") {
       // A tap on a linked path's last square leaves it as is; dragging back from
@@ -292,7 +291,7 @@ export class LevelSession {
   private beginDrag(color: number, fromStop = false): void {
     const path = this.paths[color];
     if (path.length === 0) return;
-    this.drag = { color, target: this.targetOf(color), reached: false, fromStop, drew: false };
+    this.drag = { color, target: this.targetOf(color), fromStop, drew: false };
     this.renderer.setHead(path[path.length - 1]);
     this.renderer.setBoard(this.owners, this.paths);
   }
@@ -302,6 +301,16 @@ export class LevelSession {
     const path = this.paths[color];
     const [a, b] = this.level.endpoints[color];
     return path.length > 0 && path[0] === b ? a : b;
+  }
+
+  /**
+   * True when `color`'s path has been dragged all the way onto `target`, which
+   * is what links the pair. Derived from the path, so dragging back off the
+   * target (which truncates the path) reopens it for drawing.
+   */
+  private endsOnTarget(color: number, target: number): boolean {
+    const path = this.paths[color];
+    return path.length > 0 && path[path.length - 1] === target;
   }
 
   /**
@@ -358,7 +367,10 @@ export class LevelSession {
       return;
     }
 
-    if (drag.reached || this.complete[color]) return;
+    // A path that sits on its target is linked and stops there. It grows again
+    // once the player drags back onto one of its own squares, which truncates
+    // above, so this is read from the path and never latched.
+    if (head === drag.target || this.complete[color]) return;
     if (!areAdjacent(this.level.layout, head, square)) return;
     const owner = this.owners[square];
     if (owner >= 0 && owner !== color) return;
@@ -366,7 +378,6 @@ export class LevelSession {
     path.push(square);
     this.owners[square] = color;
     drag.drew = true;
-    if (square === drag.target) drag.reached = true;
 
     this.renderer.setHead(square);
     this.renderer.setBoard(this.owners, this.paths);

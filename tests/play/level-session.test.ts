@@ -10,6 +10,7 @@ const rendererState = vi.hoisted(() => ({
   looks: [] as Array<[number, number]>,
   cursors: [] as Array<[number, number]>,
   celebrations: [] as number[][][],
+  glows: [] as Array<[number, number[]]>,
   endedLooks: 0
 }));
 
@@ -43,7 +44,9 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
       rendererState.endedLooks++;
     }
 
-    playPathGlow(_color: number, _path: number[]): void {}
+    playPathGlow(color: number, path: number[]): void {
+      rendererState.glows.push([color, path.slice()]);
+    }
 
     startCelebration(paths: readonly number[][]): void {
       rendererState.celebrations.push(paths.map((path) => path.slice()));
@@ -127,6 +130,7 @@ function makeSession(level: Level): Harness {
   rendererState.looks.length = 0;
   rendererState.cursors.length = 0;
   rendererState.celebrations.length = 0;
+  rendererState.glows.length = 0;
   rendererState.endedLooks = 0;
 
   const press = (square: number): void => {
@@ -249,6 +253,50 @@ describe("LevelSession", () => {
     expect(session.paths[0]).toEqual(path.slice(0, 3));
     expect(session.owners[path[2]]).toBe(0);
     expect(session.complete[0]).toBe(false);
+  });
+
+  it("keeps the drag alive when it backs off the target square", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { session, press, move, release } = makeSession(level);
+    const target = path[path.length - 1];
+    const before = path[path.length - 2];
+
+    press(path[0]);
+    for (let i = 1; i < path.length; i++) move(path[i]);
+    expect(session.paths[0]).toEqual(path);
+
+    // Back off the target without releasing: the path truncates and must stay
+    // free to grow again, or the pair can never be linked by this drag.
+    move(before);
+    expect(session.paths[0]).toEqual(path.slice(0, -1));
+    expect(session.complete[0]).toBe(false);
+
+    // Truncating further and growing again both still work.
+    move(path[path.length - 3]);
+    expect(session.paths[0]).toEqual(path.slice(0, -2));
+    move(before);
+    expect(session.paths[0]).toEqual(path.slice(0, -1));
+
+    move(target);
+    expect(session.paths[0]).toEqual(path);
+    release();
+    expect(session.complete[0]).toBe(true);
+  });
+
+  it("plays no completion glow for a path that came back short of its target", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { session, press, move, release } = makeSession(level);
+
+    press(path[0]);
+    for (let i = 1; i < path.length; i++) move(path[i]);
+    move(path[path.length - 2]);
+    release();
+
+    expect(session.paths[0]).toEqual(path.slice(0, -1));
+    expect(session.complete[0]).toBe(false);
+    expect(rendererState.glows).toEqual([]);
   });
 
   it("truncates a path back to a square that is pressed again", () => {
