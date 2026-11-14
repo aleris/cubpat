@@ -55,6 +55,8 @@ const GLOW_SETTLE = 0.3;
 const GLOW_SUSTAIN = 0.4;
 const GLOW_HOLD = 0.25;
 const GLOW_FADE = 0.35;
+/** Pause between two runs of the end-of-level glow. */
+const GLOW_GAP = 0.6;
 
 /** Lift of the start/stop icons above the cube surface (above the stitches). */
 const ICON_LIFT = 0.029;
@@ -93,6 +95,8 @@ interface GlowState {
   step: number;
   holdStart: number;
   time: number;
+  /** Seconds until the glow runs again; Infinity for a one-shot glow. */
+  period: number;
 }
 
 export class CubeRenderer {
@@ -143,6 +147,8 @@ export class CubeRenderer {
   private readonly focusPoint: Vec3 = [0, 0, 0];
 
   private glow: GlowState | null = null;
+  /** The end-of-level animation: one looping glow per path. */
+  private celebration: GlowState[] = [];
   private readonly tileGlow: Float32Array;
 
   private readonly tmpA = new pc.Vec3();
@@ -710,12 +716,45 @@ export class CubeRenderer {
   }
 
   // -------------------------------------------------------------------------
-  // completion glow: the path's squares light up one by one
+  // completion glow: the path's squares light up one by one, once when a pair
+  // is linked and on a loop, for every path, once the level is solved
   // -------------------------------------------------------------------------
 
   playPathGlow(color: number, path: number[]): void {
+    this.clearCelebration();
     this.clearGlow();
-    if (path.length === 0) return;
+    this.glow = this.buildGlow(color, path);
+  }
+
+  /**
+   * The end of the level: every path runs the completion glow on repeat, so the
+   * finished board keeps celebrating while the player looks at it. Each path
+   * owns its loop and starts again once its own glow has faded; the loops share
+   * one period, taken from the longest path, so they restart in step.
+   */
+  startCelebration(paths: readonly number[][]): void {
+    this.clearGlow();
+    this.clearCelebration();
+    let span = 0;
+    for (let color = 0; color < paths.length; color++) {
+      const glow = this.buildGlow(color, paths[color]);
+      if (!glow) continue;
+      this.celebration.push(glow);
+      span = Math.max(span, glow.holdStart + GLOW_FADE);
+    }
+    if (this.celebration.length === 0) return;
+    const period = span + GLOW_GAP;
+    for (const glow of this.celebration) glow.period = period;
+  }
+
+  stopGlow(): void {
+    this.clearGlow();
+    this.clearCelebration();
+  }
+
+  /** Overlays and materials for one glow along `path`, not yet started. */
+  private buildGlow(color: number, path: number[]): GlowState | null {
+    if (path.length === 0) return null;
     const hex = this.level.palette[color % this.level.palette.length];
     const overlays: pc.Entity[] = [];
     const materials: pc.StandardMaterial[] = [];
@@ -741,33 +780,50 @@ export class CubeRenderer {
 
     const span = Math.min(1.3, 0.45 + path.length * 0.045);
     const step = span / path.length;
-    this.glow = {
+    return {
       path: path.slice(),
       overlays,
       materials,
       step,
       holdStart: (path.length - 1) * step + GLOW_HOLD,
-      time: 0
+      time: 0,
+      period: Infinity
     };
   }
 
-  stopGlow(): void {
-    this.clearGlow();
+  private releaseGlow(glow: GlowState): void {
+    for (const overlay of glow.overlays) overlay.destroy();
+    for (const mat of glow.materials) mat.destroy();
   }
 
   private clearGlow(): void {
     if (this.glow) {
-      for (const overlay of this.glow.overlays) overlay.destroy();
-      for (const mat of this.glow.materials) mat.destroy();
+      this.releaseGlow(this.glow);
       this.glow = null;
     }
     this.tileGlow.fill(0);
   }
 
+  private clearCelebration(): void {
+    for (const glow of this.celebration) this.releaseGlow(glow);
+    this.celebration.length = 0;
+    this.tileGlow.fill(0);
+  }
+
   private updateGlow(dt: number): void {
-    const glow = this.glow;
-    if (!glow) return;
+    if (!this.glow && this.celebration.length === 0) return;
+    this.tileGlow.fill(0);
+    if (this.glow && !this.advanceGlow(this.glow, dt)) this.clearGlow();
+    for (const glow of this.celebration) this.advanceGlow(glow, dt);
+  }
+
+  /**
+   * Run one glow forward by `dt`, looping it at the end of its period. False
+   * once a one-shot glow has faded out.
+   */
+  private advanceGlow(glow: GlowState, dt: number): boolean {
     glow.time += dt;
+    if (glow.time >= glow.period) glow.time -= glow.period;
     const fadeT = Math.max(0, (glow.time - glow.holdStart) / GLOW_FADE);
     const fade = 1 - Math.min(1, fadeT);
     for (let k = 0; k < glow.path.length; k++) {
@@ -795,7 +851,7 @@ export class CubeRenderer {
         mat.update();
       }
     }
-    if (fadeT >= 1) this.clearGlow();
+    return fadeT < 1;
   }
 
   // -------------------------------------------------------------------------
@@ -821,7 +877,7 @@ export class CubeRenderer {
   }
 
   destroy(): void {
-    this.clearGlow();
+    this.stopGlow();
     this.stage.destroy();
     for (const mesh of this.stitchMeshes) mesh.destroy();
     this.emptyMaterial.destroy();

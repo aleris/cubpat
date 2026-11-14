@@ -475,24 +475,27 @@ export class LevelSession {
   }
 
   /**
-   * Report the solve the moment the board is complete. The completion glow is
-   * decoration: it can be cut short by another press, a reset or leaving the
-   * level, so nothing may depend on it finishing.
+   * Report the solve the moment the board is complete, and keep the finished
+   * board glowing. The celebration is decoration: it can be cut short by a
+   * reset, an undo or leaving the level, so nothing may depend on it finishing.
    */
   private updateSolved(): void {
     if (!this.isSolved()) {
+      if (this.solved) this.renderer.stopGlow();
       this.solved = false;
       return;
     }
     if (this.solved) return;
     this.solved = true;
+    this.renderer.startCelebration(this.paths);
     this.callbacks.onSolved();
   }
 
   private completeColor(color: number): void {
-    this.refreshComplete(color);
     this.renderer.setBoard(this.owners, this.paths);
     this.renderer.playPathGlow(color, this.paths[color].slice());
+    // Judged last, so a solve replaces this path's single glow with the loop.
+    this.refreshComplete(color);
   }
 
   /** Every pair linked and every square coloured. */

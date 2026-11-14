@@ -9,6 +9,7 @@ const rendererState = vi.hoisted(() => ({
   pick: null as number | null,
   looks: [] as Array<[number, number]>,
   cursors: [] as Array<[number, number]>,
+  celebrations: [] as number[][][],
   endedLooks: 0
 }));
 
@@ -43,6 +44,10 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
     }
 
     playPathGlow(_color: number, _path: number[]): void {}
+
+    startCelebration(paths: readonly number[][]): void {
+      rendererState.celebrations.push(paths.map((path) => path.slice()));
+    }
 
     update(): void {}
 
@@ -121,6 +126,7 @@ function makeSession(level: Level): Harness {
   rendererState.pick = null;
   rendererState.looks.length = 0;
   rendererState.cursors.length = 0;
+  rendererState.celebrations.length = 0;
   rendererState.endedLooks = 0;
 
   const press = (square: number): void => {
@@ -190,6 +196,25 @@ describe("LevelSession", () => {
     expect(session.solved).toBe(true);
     expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
     expect(callbacks.onHint).not.toHaveBeenCalled();
+  });
+
+  it("starts the looping end-of-level glow once, over every path", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const { session, press, move, release } = makeSession(level);
+
+    const draw = (path: number[]): void => {
+      press(path[0]);
+      for (let i = 1; i < path.length; i++) move(path[i]);
+      release();
+    };
+
+    for (let color = 1; color < level.colors; color++) draw(level.solution[color]);
+    expect(rendererState.celebrations).toHaveLength(0);
+
+    draw(level.solution[0]);
+
+    expect(session.solved).toBe(true);
+    expect(rendererState.celebrations).toEqual([level.solution.map((path) => path.slice())]);
   });
 
   it("reports the solve once, not again when a linked path's last square is tapped", () => {
