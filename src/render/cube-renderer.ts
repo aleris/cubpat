@@ -729,22 +729,19 @@ export class CubeRenderer {
   /**
    * The end of the level: every path runs the completion glow on repeat, so the
    * finished board keeps celebrating while the player looks at it. Each path
-   * owns its loop and starts again once its own glow has faded; the loops share
-   * one period, taken from the longest path, so they restart in step.
+   * owns its loop and starts again as soon as its own glow has faded, whatever
+   * the other paths are doing, so the waves drift apart instead of waiting for
+   * the longest one.
    */
   startCelebration(paths: readonly number[][]): void {
     this.clearGlow();
     this.clearCelebration();
-    let span = 0;
     for (let color = 0; color < paths.length; color++) {
       const glow = this.buildGlow(color, paths[color]);
       if (!glow) continue;
+      glow.period = glow.holdStart + GLOW_FADE + GLOW_GAP;
       this.celebration.push(glow);
-      span = Math.max(span, glow.holdStart + GLOW_FADE);
     }
-    if (this.celebration.length === 0) return;
-    const period = span + GLOW_GAP;
-    for (const glow of this.celebration) glow.period = period;
   }
 
   stopGlow(): void {
@@ -822,8 +819,10 @@ export class CubeRenderer {
    * once a one-shot glow has faded out.
    */
   private advanceGlow(glow: GlowState, dt: number): boolean {
-    glow.time += dt;
-    if (glow.time >= glow.period) glow.time -= glow.period;
+    // Modulo rather than a single subtraction: a stalled tab can hand in a
+    // frame longer than a whole cycle, and a one-shot glow's infinite period
+    // leaves the time untouched.
+    glow.time = (glow.time + dt) % glow.period;
     const fadeT = Math.max(0, (glow.time - glow.holdStart) / GLOW_FADE);
     const fade = 1 - Math.min(1, fadeT);
     for (let k = 0; k < glow.path.length; k++) {
