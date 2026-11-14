@@ -7,6 +7,7 @@ import {
   VIEW_DIR,
   advanceLook,
   axisAngleQuat,
+  dragTilt,
   playFacesFacing,
   tiltQuat,
   visibleFaceCount
@@ -224,6 +225,47 @@ describe("advanceLook", () => {
       q = advanceLook(q, RIGHT, dy * 0.02);
       expect(playFacesFacing(q)).toBe(true);
       expect(visibleFaces(q).every((face) => PLAY.has(face))).toBe(true);
+    }
+  });
+});
+
+describe("dragTilt", () => {
+  /** The face on the camera's right: the one a drag to the right exposes. */
+  const dotOf = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const rightFace = FACES.reduce(
+    (best, face, index) => (dotOf(face.n, RIGHT) > dotOf(FACES[best].n, RIGHT) ? index : best),
+    0
+  );
+  const facing = (q: Quat): number => dotOf(quatRotate(q, FACES[rightFace].n), VIEW_DIR);
+
+  it("is upright until the finger travels", () => {
+    expect(sameRotation(dragTilt(0, 0, RIGHT, UP), quatIdentity())).toBe(true);
+  });
+
+  it("tips a little for a small move and grows with the travel", () => {
+    const nudge = tiltAngle(dragTilt(6, 0, RIGHT, UP));
+    const pull = tiltAngle(dragTilt(60, 0, RIGHT, UP));
+
+    expect(nudge).toBeGreaterThan(0.02);
+    expect(nudge).toBeLessThan(0.1);
+    expect(pull).toBeGreaterThan(nudge);
+    expect(tiltAngle(dragTilt(16, 0, RIGHT, UP))).toBeGreaterThan(nudge);
+  });
+
+  it("stops at the tilt limit however far the finger goes", () => {
+    expect(tiltAngle(dragTilt(400, 0, RIGHT, UP))).toBeCloseTo(TILT_MAX, 9);
+    expect(tiltAngle(dragTilt(-400, 0, RIGHT, UP))).toBeCloseTo(TILT_MAX, 9);
+    expect(tiltAngle(dragTilt(0, 400, RIGHT, UP))).toBeCloseTo(TILT_MAX, 9);
+  });
+
+  it("brings the face on the side the finger went towards the camera", () => {
+    expect(facing(dragTilt(60, 0, RIGHT, UP))).toBeGreaterThan(facing(quatIdentity()));
+    expect(facing(dragTilt(-60, 0, RIGHT, UP))).toBeLessThan(facing(quatIdentity()));
+  });
+
+  it("keeps the play faces in view at the limit", () => {
+    for (const [dx, dy] of [[400, 0], [-400, 0], [0, 400], [0, -400], [300, 300], [-300, 300]]) {
+      expect(playFacesFacing(dragTilt(dx, dy, RIGHT, UP))).toBe(true);
     }
   });
 });

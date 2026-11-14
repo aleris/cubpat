@@ -92,15 +92,17 @@ xcrun simctl shutdown booted
   so a path can cross faces.
 - **Three faces only.** The camera sits on the `(1,1,1)` diagonal, so exactly
   three faces face it; those three are the whole play field and the other three
-  are never shown or clickable. The cube leans towards whatever the pointer is
-  over, up to 18 degrees, continuously on every pointer move rather than only
-  when the square under it changes: the touched square becomes the most frontal
-  part of the view and the squares around it slide towards the pointer, so
-  reaching a neighbour costs roughly half the pointer travel. Off the cube the
-  aim point stays on the nearest bit of surface and the lean fades with the
-  distance past it, so the pointer keeps steering just outside the silhouette
-  while a pointer far from the cube barely tips the view; crossing the edge never
-  jumps. A lifted touch lets the cube stand upright. The cap stays well below the
+  are never shown or clickable. The cube leans up to 18 degrees. A mouse aims
+  the lean at the pointer: the pointer's square becomes the most frontal part of
+  the view and the squares around it slide towards the pointer, so reaching a
+  neighbour costs roughly half the pointer travel. Off the cube the aim point
+  stays on the nearest bit of surface and the lean fades with the distance past
+  it, so the pointer keeps steering just outside the silhouette while a pointer
+  far from the cube barely tips the view; crossing the edge never jumps. A
+  finger has no hover, so it tips the cube by its travel from the press instead,
+  reaching the full lean after about 60 CSS px: pressing moves nothing, a small
+  move is a small tip, and the squares never jump out from under the finger. A
+  lifted touch lets the cube stand upright. The cap stays well below the
   ~35 degrees that would bring another face into view, so the visible three never
   change.
 - **Look around.** Pressing the empty space beside the cube and dragging turns

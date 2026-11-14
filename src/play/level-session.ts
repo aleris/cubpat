@@ -36,10 +36,17 @@ export interface SessionCallbacks {
  * laid down, and pressing any coloured square of a path resets it there: an
  * inside square truncates the path back to it, either end square starts the
  * path over from that end (so the press that starts a drag also reopens the
- * path where it lands). A tap on a grey square that touches the open end of a
- * path colours it, which makes the puzzle playable by tapping alone. A drag
- * that starts beside the cube turns the cube to inspect its play faces, and
- * releasing turns it back upright.
+ * path where it lands). A drag that steps back onto the square before the
+ * path's end undoes that last step; any other square of its own path is
+ * passed over without a reset, so a path can run right beside itself. A tap on
+ * a grey square that touches the open end of a path colours it, which makes the
+ * puzzle playable by tapping alone. A drag that starts beside the cube turns
+ * the cube to inspect its play faces, and releasing turns it back upright.
+ *
+ * The cube only ever tips because the pointer travelled: a mouse aims the lean
+ * at itself, and a finger, which has no hover, tips the cube by its travel from
+ * the press. Nothing moves on the press, so the square that starts a path is
+ * the one under the finger, and a small move is a small tip.
  *
  * Every edit is judged on release and again on a short timer, so a filled board
  * can never sit unsolved: see `settle`.
@@ -61,6 +68,9 @@ export class LevelSession {
   /** Pointer position at the last inspection-drag sample, in client pixels. */
   private lookX = 0;
   private lookY = 0;
+  /** Where the current drag was pressed, in client pixels. */
+  private pressX = 0;
+  private pressY = 0;
   /** True while a drag on the empty space is turning the cube. */
   private looking = false;
   private disposed = false;
@@ -172,9 +182,12 @@ export class LevelSession {
     e.preventDefault();
     this.activePointer = e.pointerId;
     this.canvas.setPointerCapture(e.pointerId);
-    // Deliberately no `setCursor` here: steering the cube on the press itself
-    // slides squares under the finger, and the press would start a path from a
-    // square the player never aimed at. The lean starts with the first move.
+    // Deliberately no lean here: steering the cube while the finger lands
+    // slides squares under it, and the press would start a path from a square
+    // the player never aimed at. The press is kept as the lean's reference, so
+    // the cube tips with the finger's travel from here (see `pointerMove`).
+    this.pressX = e.clientX;
+    this.pressY = e.clientY;
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
       // Empty space around the cube: the drag turns the cube instead of
@@ -199,8 +212,14 @@ export class LevelSession {
       return;
     }
     // The lean follows every move, not just the square changes: that is what
-    // slides the next square under the pointer.
-    this.renderer.setCursor(e.clientX, e.clientY);
+    // slides the next square under the pointer. A mouse hovers, so it aims at
+    // the pointer itself; a finger has no hover, so it tips the cube by its
+    // travel since the press, which starts from where the cube already is.
+    if (e.pointerType === "mouse") {
+      this.renderer.setCursor(e.clientX, e.clientY);
+    } else if (this.drag) {
+      this.renderer.leanBy(e.clientX - this.pressX, e.clientY - this.pressY);
+    }
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
       this.canvas.style.cursor = "grab";
@@ -298,8 +317,8 @@ export class LevelSession {
 
   /**
    * True when `color`'s path has been dragged all the way onto `target`, which
-   * is what links the pair. Derived from the path, so dragging back off the
-   * target (which truncates the path) reopens it for drawing.
+   * is what links the pair. Derived from the path, so stepping back off the
+   * target, or a press that truncates the path, reopens it for drawing.
    */
   private endsOnTarget(color: number, target: number): boolean {
     const path = this.paths[color];
@@ -357,17 +376,21 @@ export class LevelSession {
     const head = path[path.length - 1];
     if (square === head) return;
 
-    const existing = path.indexOf(square);
-    if (existing >= 0) {
-      this.truncate(color, existing);
+    // Stepping back onto the square before the end undoes the last step, which
+    // also unlinks a path that sat on its target.
+    if (path.length > 1 && square === path[path.length - 2]) {
+      this.truncate(color, path.length - 2);
       this.renderer.setHead(path[path.length - 1]);
       this.renderer.setBoard(this.owners, this.paths);
       return;
     }
 
-    // A path that sits on its target is linked and stops there. It grows again
-    // once the player drags back onto one of its own squares, which truncates
-    // above, so this is read from the path and never latched.
+    // Any other square of the path is passed over: only a press resets a path
+    // further back, so a path that doubles back beside itself is not cut short
+    // when the pointer brushes an earlier square.
+    if (path.includes(square)) return;
+
+    // A path that sits on its target is linked and stops there.
     if (head === drag.target || this.complete[color]) return;
     if (!areAdjacent(this.level.layout, head, square)) return;
     const owner = this.owners[square];

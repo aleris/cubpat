@@ -9,6 +9,7 @@ const rendererState = vi.hoisted(() => ({
   pick: null as number | null,
   looks: [] as Array<[number, number]>,
   cursors: [] as Array<[number, number]>,
+  leans: [] as Array<[number, number]>,
   celebrations: [] as number[][][],
   glows: [] as Array<[number, number[]]>,
   endedLooks: 0
@@ -28,6 +29,9 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
 
     setCursor(x: number, y: number): void {
       rendererState.cursors.push([x, y]);
+    }
+    leanBy(dx: number, dy: number): void {
+      rendererState.leans.push([dx, dy]);
     }
     setHover(): void {}
     setHead(): void {}
@@ -129,6 +133,7 @@ function makeSession(level: Level): Harness {
   rendererState.pick = null;
   rendererState.looks.length = 0;
   rendererState.cursors.length = 0;
+  rendererState.leans.length = 0;
   rendererState.celebrations.length = 0;
   rendererState.glows.length = 0;
   rendererState.endedLooks = 0;
@@ -301,9 +306,10 @@ describe("LevelSession", () => {
     expect(session.complete[0]).toBe(false);
   });
 
-  it("keeps the drag alive when it backs off the target square", () => {
+  it("passes over its own earlier squares but undoes a step back", () => {
     const level = generateLevel(LEVEL_CONFIGS[0], 12345);
     const path = level.solution[0];
+    expect(path.length).toBeGreaterThanOrEqual(5);
     const { session, press, move, release } = makeSession(level);
     const target = path[path.length - 1];
     const before = path[path.length - 2];
@@ -312,13 +318,17 @@ describe("LevelSession", () => {
     for (let i = 1; i < path.length; i++) move(path[i]);
     expect(session.paths[0]).toEqual(path);
 
-    // Back off the target without releasing: the path truncates and must stay
-    // free to grow again, or the pair can never be linked by this drag.
+    // Brushing squares further back than the previous one, the start included,
+    // must not cut the path short: only a press resets that far.
+    move(path[path.length - 3]);
+    move(path[0]);
+    expect(session.paths[0]).toEqual(path);
+
+    // Stepping back onto the previous square undoes one step at a time, and
+    // backing off the target leaves the drag free to grow again.
     move(before);
     expect(session.paths[0]).toEqual(path.slice(0, -1));
     expect(session.complete[0]).toBe(false);
-
-    // Truncating further and growing again both still work.
     move(path[path.length - 3]);
     expect(session.paths[0]).toEqual(path.slice(0, -2));
     move(before);
@@ -559,10 +569,31 @@ describe("LevelSession", () => {
     press(path[0]);
     expect(rendererState.cursors).toEqual([]);
 
-    // The lean follows the finger from its first move, with the path.
+    // A mouse hovers, so it aims the lean at the pointer from then on.
     move(path[1]);
     expect(rendererState.cursors).toEqual([[0, 0]]);
     release();
+  });
+
+  it("tips the cube by a finger's travel from the press, not by where it lands", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { canvas } = makeSession(level);
+
+    rendererState.pick = path[0];
+    canvas.emit("pointerdown", { pointerType: "touch", clientX: 100, clientY: 200 });
+    // A touch has no hover: the press alone steers nothing.
+    expect(rendererState.cursors).toEqual([]);
+    expect(rendererState.leans).toEqual([]);
+
+    // Only the travel since the press reaches the cube, so a 6 px move tips it
+    // by 6 px of travel however far that point is from the cube's centre.
+    rendererState.pick = path[1];
+    canvas.emit("pointermove", { pointerType: "touch", clientX: 106, clientY: 203 });
+    expect(rendererState.leans).toEqual([[6, 3]]);
+    expect(rendererState.cursors).toEqual([]);
+
+    canvas.emit("pointerup", { pointerType: "touch" });
   });
 
   it("does not turn the cube when the drag starts on a square", () => {

@@ -103,6 +103,33 @@ export function advanceLook(from: Quat, axis: Vec3, angle: number): Quat {
   return quatMul(axisAngleQuat(axis, lo), from);
 }
 
+/**
+ * Screen travel of a finger, in CSS pixels, at which the lean of
+ * `dragTilt` is full. About the reach a pointer hovering over the cube has,
+ * so steering by dragging feels like steering by pointing.
+ */
+export const LEAN_REACH = 185;
+
+/**
+ * Lean of the cube (local -> world) for a drag of `dx`, `dy` CSS pixels from
+ * where the finger started, with `right` and `up` the screen axes. The cube
+ * tips the way the finger went, so the side face on that side comes round
+ * towards the camera and the squares it hides come into reach. Travel is what
+ * counts, not where the finger is: no travel is upright, so a press never
+ * moves the cube, and the tip grows from there instead of jumping.
+ */
+export function dragTilt(dx: number, dy: number, right: Vec3, up: Vec3, reach = LEAN_REACH): Quat {
+  if (dx === 0 && dy === 0) return quatIdentity();
+  // Aim a point just off the camera axis by the travel, from the face the
+  // camera already looks at: `tiltQuat` then tips the cube towards it and caps
+  // the turn at `TILT_MAX`.
+  return tiltQuat([
+    VIEW_DIR[0] + (right[0] * dx - up[0] * dy) / reach,
+    VIEW_DIR[1] + (right[1] * dx - up[1] * dy) / reach,
+    VIEW_DIR[2] + (right[2] * dx - up[2] * dy) / reach
+  ]);
+}
+
 /** Number of cube faces whose normal points towards the camera. The play field
  *  is only valid while this stays at three. */
 export function visibleFaceCount(q: Quat): number {

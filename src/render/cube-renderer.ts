@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { FACES, projectToSquare, type CubeLayout } from "../core/layout.ts";
 import type { Level } from "../core/level.ts";
 import { cross, dot, madd, quatMul, type Quat, type Vec3 } from "../core/math.ts";
-import { TILT_MAX, advanceLook, playFacesFacing, tiltQuat } from "../core/view.ts";
+import { TILT_MAX, advanceLook, dragTilt, playFacesFacing, tiltQuat } from "../core/view.ts";
 import { drawIconAtlas } from "./icon-atlas.ts";
 import { drawTilePattern, TILE_PATTERN_SIZE } from "./tile-patterns.ts";
 import {
@@ -507,6 +507,20 @@ export class CubeRenderer {
   /** Rest the cube upright (pointer off the cube, or a touch lifted). */
   clearCursor(): void {
     this.tiltTarget.set(0, 0, 0, 1);
+  }
+
+  /**
+   * Tip the cube by a finger's travel `dx`, `dy` since its press, in client
+   * pixels. Relative on purpose: a touch has no hover, so aiming at the finger
+   * would swing the cube to a pose it was not in, and the squares would jump
+   * under the finger right after the drag starts. Travel instead starts at
+   * upright and grows, so the finger sees the cube answer it move by move.
+   */
+  leanBy(dx: number, dy: number): void {
+    const right = this.camera.right;
+    const up = this.camera.up;
+    const q = dragTilt(dx, dy, [right.x, right.y, right.z], [up.x, up.y, up.z]);
+    this.tiltTarget.set(q[0], q[1], q[2], q[3]);
   }
 
   // -------------------------------------------------------------------------
