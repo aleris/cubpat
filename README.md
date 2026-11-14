@@ -133,8 +133,10 @@ xcrun simctl shutdown booted
   square after another. A tap on an empty square no path can reach shows an
   instruction at the bottom of the screen. Only one pointer drives the board:
   an extra finger or a resting palm is ignored until the first one lifts.
-- **Backtracking.** Dragging back onto a square the path already covers removes
-  the colour from that point forward.
+- **Backtracking.** Dragging back onto the square just before the path's end
+  undoes that last step, one square at a time. Dragging over any other square
+  the path already covers changes nothing, so a path can run right beside
+  itself. Only a press resets a path further back.
 - **Completion.** Reach the second square of the pair to link the colour (its
   squares light up one by one); tapping the second square does the same once the
   path reaches the square in front of it. A linked colour cannot grow any
