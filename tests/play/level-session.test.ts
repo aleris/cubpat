@@ -8,6 +8,7 @@ const rendererState = vi.hoisted(() => ({
   instance: null as null | { destroyed: boolean },
   pick: null as number | null,
   looks: [] as Array<[number, number]>,
+  cursors: [] as Array<[number, number]>,
   endedLooks: 0
 }));
 
@@ -23,7 +24,9 @@ vi.mock("../../src/render/cube-renderer.ts", () => {
       return rendererState.pick;
     }
 
-    setCursor(): void {}
+    setCursor(x: number, y: number): void {
+      rendererState.cursors.push([x, y]);
+    }
     setHover(): void {}
     setHead(): void {}
     setBoard(): void {}
@@ -117,6 +120,7 @@ function makeSession(level: Level): Harness {
   );
   rendererState.pick = null;
   rendererState.looks.length = 0;
+  rendererState.cursors.length = 0;
   rendererState.endedLooks = 0;
 
   const press = (square: number): void => {
@@ -424,6 +428,22 @@ describe("LevelSession", () => {
     canvas.emit("pointerup");
     expect(rendererState.endedLooks).toBe(1);
     expect(canvas.style.cursor).toBe("default");
+  });
+
+  it("leaves the cube where it is on the press that starts a path", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { press, move, release } = makeSession(level);
+
+    // Leaning on the press would slide the square out from under the finger and
+    // start the path somewhere the player did not aim.
+    press(path[0]);
+    expect(rendererState.cursors).toEqual([]);
+
+    // The lean follows the finger from its first move, with the path.
+    move(path[1]);
+    expect(rendererState.cursors).toEqual([[0, 0]]);
+    release();
   });
 
   it("does not turn the cube when the drag starts on a square", () => {

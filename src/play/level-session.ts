@@ -173,8 +173,9 @@ export class LevelSession {
     e.preventDefault();
     this.activePointer = e.pointerId;
     this.canvas.setPointerCapture(e.pointerId);
-    this.renderer.setCursor(e.clientX, e.clientY);
-
+    // Deliberately no `setCursor` here: steering the cube on the press itself
+    // slides squares under the finger, and the press would start a path from a
+    // square the player never aimed at. The lean starts with the first move.
     const square = this.renderer.pick(e.clientX, e.clientY);
     if (square === null) {
       // Empty space around the cube: the drag turns the cube instead of
