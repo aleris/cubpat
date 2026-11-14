@@ -272,7 +272,7 @@ describe("LevelSession", () => {
     expect(callbacks.onSolved).not.toHaveBeenCalled();
   });
 
-  it("links a pair that stopped beside its endpoint once the board fills", () => {
+  it("leaves a path that stopped beside its endpoint for the player to finish", () => {
     const level = generateLevel(LEVEL_CONFIGS[0], 12345);
     const run = makeSession(level);
 
@@ -282,12 +282,20 @@ describe("LevelSession", () => {
     const path = level.solution[0];
     tapAlong(run, path.slice(0, -1));
 
+    // A full board must not close the pair on its own: the player may want the
+    // path to run around that square instead of into it.
     expect(Array.from(run.session.owners).every((owner) => owner >= 0)).toBe(true);
+    expect(run.session.paths[0]).toEqual(path.slice(0, -1));
+    expect(run.session.complete[0]).toBe(false);
+    expect(run.session.solved).toBe(false);
+    expect(run.callbacks.onSolved).not.toHaveBeenCalled();
+    expect(run.callbacks.onStuck).toHaveBeenCalledWith("unlinked");
+
+    // Playing the endpoint square itself is what finishes the pair.
+    run.press(path[path.length - 1]);
+    run.release();
     expect(run.session.paths[0]).toEqual(path);
-    expect(run.session.complete.every(Boolean)).toBe(true);
     expect(run.session.solved).toBe(true);
-    expect(run.callbacks.onSolved).toHaveBeenCalledTimes(1);
-    expect(run.callbacks.onStuck).not.toHaveBeenCalled();
   });
 
   it("warns when a filled board still has a pair it cannot close", () => {
@@ -329,11 +337,13 @@ describe("LevelSession", () => {
     run.session.paths[0] = path.slice(0, -1);
 
     run.tick(0.2);
-    expect(run.callbacks.onSolved).not.toHaveBeenCalled();
+    expect(run.callbacks.onStuck).not.toHaveBeenCalled();
 
     run.tick(0.3);
-    expect(run.session.paths[0]).toEqual(path);
-    expect(run.callbacks.onSolved).toHaveBeenCalledTimes(1);
+    // The board is judged but not closed for the player: the path stays short.
+    expect(run.session.paths[0]).toEqual(path.slice(0, -1));
+    expect(run.callbacks.onSolved).not.toHaveBeenCalled();
+    expect(run.callbacks.onStuck).toHaveBeenCalledWith("unlinked");
   });
 
   it("explains a tap on a grey square when no path can reach it", () => {

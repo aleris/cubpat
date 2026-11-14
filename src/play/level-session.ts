@@ -513,40 +513,19 @@ export class LevelSession {
   }
 
   /**
-   * Judge the board once an edit has landed: link what can only be linked,
-   * then either report the solve or say what is still missing.
+   * Judge the board once an edit has landed: report the solve, or say what is
+   * still missing.
    *
-   * A pair's endpoint squares are pre-coloured, so a path that stops on the
-   * square beside its far endpoint looks exactly like a joined one — the board
-   * is full, `complete` is false, and the player has no square left to tap that
-   * shows the difference. On a full board the endpoint is the only square the
-   * path can still take, so take it instead of leaving a spent board unsolved.
+   * A path that ends beside its pair's far endpoint is deliberately left open.
+   * The endpoint square is pre-coloured, so the board can look finished while
+   * the pair is not, but the player may still want to route the path around
+   * that square instead of into it; only playing the endpoint square itself
+   * finishes such a pair.
    */
   private settle(): void {
     if (this.disposed || this.drag || this.looking) return;
-    if (!this.solved && this.isFilled()) {
-      let closed = false;
-      for (let color = 0; color < this.level.colors; color++) {
-        closed = this.closeOpenPair(color) || closed;
-      }
-      if (closed) this.renderer.setBoard(this.owners, this.paths);
-    }
     this.updateSolved();
     if (!this.solved) this.reportStuck();
-  }
-
-  /** Link `color` when its path ends beside the endpoint it still has to reach. */
-  private closeOpenPair(color: number): boolean {
-    if (this.complete[color]) return false;
-    const path = this.paths[color];
-    if (path.length === 0) return false;
-    const far = this.targetOf(color);
-    if (!areAdjacent(this.level.layout, path[path.length - 1], far)) return false;
-    path.push(far);
-    this.owners[far] = color;
-    this.activeColor = color;
-    this.completeColor(color);
-    return true;
   }
 
   /**
