@@ -221,7 +221,51 @@ describe("LevelSession", () => {
     expect(rendererState.celebrations).toEqual([level.solution.map((path) => path.slice())]);
   });
 
-  it("reports the solve once, not again when a linked path's last square is tapped", () => {
+  it("resets a linked path from either of its end squares", () => {
+    const level = generateLevel(LEVEL_CONFIGS[0], 12345);
+    const path = level.solution[0];
+    const { session, press, move, release } = makeSession(level);
+
+    const draw = (): void => {
+      press(path[0]);
+      for (let i = 1; i < path.length; i++) move(path[i]);
+      release();
+    };
+
+    // The open end of an unfinished path is not a reset: pressing it keeps the
+    // squares drawn so far, so the drag can carry on from there.
+    press(path[0]);
+    move(path[1]);
+    release();
+    press(path[1]);
+    release();
+    expect(session.paths[0]).toEqual(path.slice(0, 2));
+
+    // The start square of a linked path empties it back to itself.
+    draw();
+    expect(session.paths[0]).toEqual(path);
+    press(path[0]);
+    release();
+    expect(session.paths[0]).toEqual([path[0]]);
+    expect(session.complete[0]).toBe(false);
+    expect(session.owners[path[1]]).toBe(-1);
+
+    // So does the far end: a linked path is cleared from whichever end is
+    // pressed, never left as a locked-in pair.
+    draw();
+    expect(session.complete[0]).toBe(true);
+    const stop = path[path.length - 1];
+    press(stop);
+    release();
+    expect(session.paths[0]).toEqual([stop]);
+    expect(session.complete[0]).toBe(false);
+    expect(session.owners[path[1]]).toBe(-1);
+    // Both endpoints keep the colour, so the pair can be drawn again.
+    expect(session.owners[stop]).toBe(0);
+    expect(session.owners[path[0]]).toBe(0);
+  });
+
+  it("reports the solve once, not again when a linked path's far end is pressed", () => {
     const level = generateLevel(LEVEL_CONFIGS[0], 12345);
     const { session, callbacks, press, move, release } = makeSession(level);
 
@@ -232,11 +276,13 @@ describe("LevelSession", () => {
     }
     expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
 
+    // Pressing the far end of a solved path reopens it, which ends the solve
+    // but is not a second solve.
     const path = level.solution[0];
     press(path[path.length - 1]);
     release();
 
-    expect(session.solved).toBe(true);
+    expect(session.solved).toBe(false);
     expect(callbacks.onSolved).toHaveBeenCalledTimes(1);
   });
 
