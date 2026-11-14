@@ -671,9 +671,12 @@ body::before {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(34px + env(safe-area-inset-bottom));
+  /* Above the cube: a hand covers the bottom of a phone screen while playing,
+     so a message there is the easiest one to miss. It sits just below the HUD
+     row, clear of the level number and the two buttons. */
+  top: calc(max(0px, env(safe-area-inset-top)) + 56px);
   z-index: 15;
-  transform: translate(-50%, 14px);
+  transform: translate(-50%, -14px);
   padding: 11px 18px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -745,11 +748,6 @@ body::before {
   .toast {
     width: calc(100vw - 32px);
   }
-}
-
-/* Toasts clear the next-level button while it is shown. */
-#complete:not(.is-hidden) ~ .toast {
-  bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
 @keyframes rise {

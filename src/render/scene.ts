@@ -18,6 +18,12 @@ const FOV = 30;
  * tiles and the antialiased edge.
  */
 const WIDTH_FILL = 0.96;
+/**
+ * Share of the view height the cube sits below the middle of the screen. The
+ * message bar runs along the top edge while playing, so the cube is dropped
+ * far enough for that bar to clear its silhouette.
+ */
+const CUBE_DROP = 0.055;
 
 /**
  * Cube corners under every lean the pointer can cause, as interleaved pairs of
@@ -146,8 +152,16 @@ export async function createGameApp(canvas: HTMLCanvasElement): Promise<GameApp>
     const vHalf = (FOV * Math.PI) / 360;
     const heightFit = (CUBE_RADIUS / Math.sin(vHalf)) * 1.2;
     const distance = Math.max(heightFit, widthFitDistance(Math.tan(vHalf) * (width / height)));
-    camera.setPosition(CAMERA_DIR.x * distance, CAMERA_DIR.y * distance, CAMERA_DIR.z * distance);
-    camera.lookAt(0, 0, 0);
+    // Camera and aim point rise together, so the view direction, the fitted
+    // width and every picking ray are unchanged; only the cube's place in the
+    // frame moves, by `CUBE_DROP` of the visible height at its distance.
+    const drop = CUBE_DROP * 2 * distance * Math.tan(vHalf);
+    camera.setPosition(
+      CAMERA_DIR.x * distance,
+      CAMERA_DIR.y * distance + drop,
+      CAMERA_DIR.z * distance
+    );
+    camera.lookAt(0, drop, 0);
   };
   fitCamera();
 
